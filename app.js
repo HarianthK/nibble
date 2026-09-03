@@ -64,6 +64,9 @@ function settleKeys() {
 
 let last = performance.now()
 let owed = 0
+// Counted against the clock rather than animation frames, so a 120Hz screen
+// does not run every timer at double speed.
+let ticksOwed = 0
 
 function frame(now) {
   if (!running) return
@@ -80,7 +83,9 @@ function frame(now) {
   }
 
   settleKeys()
-  cpu.tickTimers()
+  ticksOwed += elapsed / (1000 / 60)
+  for (let t = 0; t < 4 && ticksOwed >= 1; t++) { cpu.tickTimers(); ticksOwed-- }
+  if (ticksOwed > 4) ticksOwed = 0
   if (cpu.drawn) { paint(); cpu.drawn = false }
   if (cpu.halted) {
     running = false

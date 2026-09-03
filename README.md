@@ -150,6 +150,13 @@ belong to the program, so they are copied into spare memory first and put back
 afterwards. A test sets three variables, shows a number, and checks all three
 survived.
 
+**Timers are counted against the clock, not against frames.** `wait` and the
+sound both run off the machine's sixty times a second timer. Ticking that once
+per animation frame is right only on a sixty hertz screen: on a 120Hz monitor
+every program would run at double speed. The elapsed milliseconds are
+accumulated instead, so a second of real time is sixty ticks whatever the screen
+is doing.
+
 **Errors carry a line number** and name what was expected. A compiler that says
 only "syntax error" is a compiler you argue with.
 
