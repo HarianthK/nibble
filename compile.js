@@ -29,7 +29,7 @@ function lex(source) {
     const stripped = text.split("#")[0]
     // The two character operators have to be tried before the single ones, or
     // != would come out as ! followed by =.
-    const re = /\s*([A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|[+\-]=|[=!<>]=|[=+\-*!])/g
+    const re = /\s*([A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|[+\-]=|[=!<>]=|[=+\-*!<>])/g
     let m
     while ((m = re.exec(stripped))) tokens.push({ text: m[1], line })
     tokens.push({ text: "\n", line })
@@ -56,12 +56,22 @@ export function compile(source) {
   const sprites = new Map()
   const code = []
   const fixups = []
+  // Six bytes of working memory, only reserved if a program shows a number.
+  let needsScratch = false
 
   const emit = (word) => { code.push(word & 0xffff); return code.length - 1 }
   const here = () => PROGRAM_START + code.length * 2
   const spriteRef = (name, ln) => {
     const slot = emit(0xa000)
     fixups.push({ slot, name, line: ln })
+  }
+
+  // The machine writes decimal digits into memory, so showing a number needs
+  // somewhere to put them and somewhere to park the registers it borrows.
+  const scratchRef = (offset) => {
+    const slot = emit(0xa000)
+    fixups.push({ slot, scratch: offset })
+    needsScratch = true
   }
 
   const reg = (name, ln) => {
@@ -87,6 +97,13 @@ export function compile(source) {
     // Emits a skip that is taken when the condition holds, so the caller can
     // put a jump straight after it to leap over the body.
     const ln = line()
+    if (peek() === "hit") {
+      // The machine sets its flag when a drawn sprite turns off a pixel that
+      // was already lit, which is the only collision test it has.
+      next()
+      emit(0x4f00)
+      return
+    }
     if (peek() === "key" || peek() === "!") {
       const negated = peek() === "!"
       if (negated) next()
@@ -103,8 +120,23 @@ export function compile(source) {
     const leftName = next()
     const left = reg(leftName, ln)
     const op = next()
-    if (op !== "==" && op !== "!=") throw new Fault(`only == and != are supported, not ${op}`, ln)
     const rightTok = next()
+
+    if (op === "<" || op === ">") {
+      // Subtracting sets the flag to 1 when there was nothing to borrow, which
+      // is to say when the first number was the larger. So a < b leaves it 0.
+      const load = (which, tok) => {
+        if (isName(tok)) emit(0x8000 | (which << 8) | (reg(tok, ln) << 4))
+        else emit(0x6000 | (which << 8) | (number(tok, ln) & 0xff))
+      }
+      if (op === "<") { load(SCRATCH_A, leftName); load(SCRATCH_B, rightTok) }
+      else { load(SCRATCH_A, rightTok); load(SCRATCH_B, leftName) }
+      emit(0x8005 | (SCRATCH_A << 8) | (SCRATCH_B << 4))
+      emit(0x3f00)
+      return
+    }
+
+    if (op !== "==" && op !== "!=") throw new Fault(`${op} is not one of == != < >`, ln)
     if (isName(rightTok)) {
       const right = reg(rightTok, ln)
       emit((op === "==" ? 0x5000 : 0x9000) | (left << 8) | (right << 4))
@@ -200,6 +232,39 @@ export function compile(source) {
       return
     }
 
+    if (word === "show") {
+      next()
+      const value = reg(next(), ln)
+      eat("at")
+      const xTok = next()
+      eat(",")
+      const yTok = next()
+
+      // Reading the digits back lands them in V0 to V2, which belong to the
+      // program, so those are parked in memory first and put back after.
+      scratchRef(0)
+      emit(0xf033 | (value << 8))
+      scratchRef(3)
+      emit(0xf255)
+      scratchRef(0)
+      emit(0xf265)
+
+      if (isName(xTok)) emit(0x8000 | (SCRATCH_A << 8) | (reg(xTok, ln) << 4))
+      else emit(0x6000 | (SCRATCH_A << 8) | (number(xTok, ln) & 0xff))
+      if (isName(yTok)) emit(0x8000 | (SCRATCH_B << 8) | (reg(yTok, ln) << 4))
+      else emit(0x6000 | (SCRATCH_B << 8) | (number(yTok, ln) & 0xff))
+
+      for (const digit of [0, 1, 2]) {
+        emit(0xf029 | (digit << 8))
+        emit(0xd005 | (SCRATCH_A << 8) | (SCRATCH_B << 4))
+        if (digit < 2) emit(0x7000 | (SCRATCH_A << 8) | 5)
+      }
+
+      scratchRef(3)
+      emit(0xf265)
+      return
+    }
+
     if (word === "loop") {
       next()
       const top = here()
@@ -291,8 +356,10 @@ export function compile(source) {
       placed.set(name, PROGRAM_START + bytes.length)
       bytes.push(...rows)
     }
-    for (const { slot, name, line: ln } of fixups) {
-      const address = placed.get(name)
+    const scratchAt = PROGRAM_START + bytes.length
+    if (needsScratch) bytes.push(0, 0, 0, 0, 0, 0)
+    for (const { slot, name, scratch, line: ln } of fixups) {
+      const address = scratch === undefined ? placed.get(name) : scratchAt + scratch
       if (address === undefined) throw new Fault(`no sprite called ${name}`, ln)
       const word = 0xa000 | address
       bytes[slot * 2] = (word >> 8) & 0xff

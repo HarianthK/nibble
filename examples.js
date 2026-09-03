@@ -38,29 +38,39 @@ loop {
   wait
 }`,
 
-  "Catch the falling block": `# A and D to move. Catch it before it lands.
-sprite paddle [ 0xF0 ]
+  "Catch the falling block": `# A and D to move. The score is at the top.
+sprite paddle [ 0xF8 ]
 sprite block  [ 0xC0 0xC0 ]
 
 var px = 28
 var bx = 20
-var by = 0
+var by = 6
 var score = 0
 
 loop {
   clear
+  show score at 1, 0
+
   if key(A) { px -= 1 }
   if key(D) { px += 1 }
+  if px > 58 { px = 58 }
+  if px < 1  { px = 1 }
 
   by += 1
-  if by == 30 {
-    by = 0
+
+  draw paddle at px, 30
+  draw block at bx, by
+  if hit {
+    score += 1
+    beep 3
+    by = 6
     rand bx, 0x3F
-    beep 4
   }
 
-  draw paddle at px, 31
-  draw block at bx, by
+  if by > 30 {
+    by = 6
+    rand bx, 0x3F
+  }
   wait
 }`,
 

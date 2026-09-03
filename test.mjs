@@ -179,6 +179,86 @@ check("held keys steer a sprite the right way on both axes", () => {
   assert(middle(down, "y") > middle(idle, "y"), "S did not move the ship down")
 })
 
+check("less than and greater than pick the right side", () => {
+  const both = (a, b, op) => run(`
+    sprite dot [ 0x80 ]
+    var p = ${a}
+    var q = ${b}
+    if p ${op} q { draw dot at 1, 1 } else { draw dot at 3, 3 }
+    halt
+  `)
+  const took = (cpu) => (on(cpu, 1, 1) ? "then" : on(cpu, 3, 3) ? "else" : "neither")
+
+  assert(took(both(3, 9, "<")) === "then", "3 < 9 should be true")
+  assert(took(both(9, 3, "<")) === "else", "9 < 3 should be false")
+  assert(took(both(5, 5, "<")) === "else", "5 < 5 should be false")
+  assert(took(both(9, 3, ">")) === "then", "9 > 3 should be true")
+  assert(took(both(3, 9, ">")) === "else", "3 > 9 should be false")
+  assert(took(both(5, 5, ">")) === "else", "5 > 5 should be false")
+})
+
+check("comparing against a plain number works too", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var n = 0
+    while n < 6 { n += 1 }
+    draw dot at n, 2
+    halt
+  `)
+  assert(on(cpu, 6, 2), "the loop should have stopped with n at 6")
+})
+
+check("show puts a number on screen and gives the registers back", () => {
+  const cpu = run(`
+    var a = 7
+    var b = 8
+    var c = 9
+    var score = 123
+    show score at 10, 4
+    halt
+  `)
+  assert(litCount(cpu) > 20, `expected digits to be drawn, found ${litCount(cpu)} lit pixels`)
+  // The digits are drawn from the machine's own font, five rows tall.
+  let inBand = 0
+  for (let y = 4; y < 9; y++) for (let x = 10; x < 25; x++) if (on(cpu, x, y)) inBand++
+  assert(inBand > 20, `expected the digits where they were asked for, found ${inBand}`)
+  assert(cpu.v[0] === 7 && cpu.v[1] === 8 && cpu.v[2] === 9,
+    `show trampled the first three variables: ${cpu.v[0]}, ${cpu.v[1]}, ${cpu.v[2]}`)
+})
+
+check("show draws different pictures for different numbers", () => {
+  const shot = (n) => {
+    const cpu = run(`var s = ${n}
+show s at 2, 2
+halt`)
+    return cpu.display.join("")
+  }
+  assert(shot(1) !== shot(2), "1 and 2 came out looking the same")
+  assert(shot(10) !== shot(100), "10 and 100 came out looking the same")
+})
+
+check("hit reports when two sprites overlap", () => {
+  const overlapping = run(`
+    sprite dot [ 0x80 ]
+    sprite mark [ 0x80 ]
+    draw dot at 5, 5
+    draw mark at 5, 5
+    if hit { draw dot at 20, 20 }
+    halt
+  `)
+  assert(on(overlapping, 20, 20), "drawing on top of a lit pixel should have been a hit")
+
+  const apart = run(`
+    sprite dot [ 0x80 ]
+    sprite mark [ 0x80 ]
+    draw dot at 5, 5
+    draw mark at 30, 5
+    if hit { draw dot at 20, 20 }
+    halt
+  `)
+  assert(!on(apart, 20, 20), "sprites nowhere near each other should not be a hit")
+})
+
 check("a real program compiles to something the machine accepts", () => {
   const { bytes, error } = compile(`
     sprite ship [ 0x60 0xF0 0x90 ]

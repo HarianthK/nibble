@@ -62,16 +62,22 @@ Drawing flips pixels rather than painting them, which is how the machine works.
 Drawing the same sprite twice in the same place rubs it out again, and that is
 how you move something: draw, erase, draw somewhere else.
 
-**Conditions** are equality and keys. There is no `<` or `>`, because the
-machine has no instruction for it and faking one quietly would be worse than
-leaving it out.
+**Conditions** cover equality, size, keys, and whether two sprites just
+touched.
 
 ```
 if x == 5 { ... } else { ... }
 if x != y { ... }
+if x < 10 { ... }
+if x > y { ... }
 if key(A) { ... }
 if !key(D) { ... }
+if hit { ... }
 ```
+
+`hit` is true when the sprite you just drew turned off a pixel that was already
+lit, which is the only collision test the machine has. Check it straight after
+a `draw`.
 
 **Loops** run forever or until a condition fails.
 
@@ -79,6 +85,10 @@ if !key(D) { ... }
 loop { ... }
 while x != 10 { ... }
 ```
+
+**Numbers on screen.** `show score at 1, 0` writes a variable out as up to
+three digits, using the font built into the machine. That is how a game gets a
+score.
 
 **The rest.** `clear` wipes the screen. `wait` holds until the next sixtieth of
 a second, which is how you get a steady frame rate. `rand name, 0x3F` puts a
@@ -127,10 +137,18 @@ registers. That leaves thirteen.
 number" instruction, only "add a number", so `x -= 3` compiles to `x += 253`.
 Eight bit registers wrap, so the answer is the same.
 
-**No less-than.** CHIP-8 compares for equality and nothing else. A `<` could be
-built from subtraction and the carry flag, but it would cost several
-instructions and behave oddly at the edges, so it is absent rather than
-half-right.
+**Less-than is built, not borrowed.** CHIP-8 has no compare instruction beyond
+equality. So `a < b` subtracts one from the other and reads the flag the machine
+sets when there was nothing to borrow, which is left at zero exactly when the
+first number was the smaller. `a > b` is the same subtraction the other way
+round. Equal counts as neither, which the tests check at the boundary.
+
+**Showing a number borrows three registers and gives them back.** The
+instruction that splits a number into digits writes them into memory, and the
+only way to read them out again lands them in the first three registers. Those
+belong to the program, so they are copied into spare memory first and put back
+afterwards. A test sets three variables, shows a number, and checks all three
+survived.
 
 **Errors carry a line number** and name what was expected. A compiler that says
 only "syntax error" is a compiler you argue with.
@@ -143,8 +161,12 @@ written, with no error anywhere. The test that caught it holds one key down,
 leaves another up, and checks which branches ran. A parser test would have
 passed, because the parser was perfectly happy.
 
+The same gap was waiting for `<` and `>`, which the lexer also had no rule for,
+only `<=` and `>=`. Knowing the shape of the bug is what made it a two second
+fix the second time rather than an afternoon.
+
 ## Built with
 
-Nothing. It is four files of JavaScript, served as they are. The emulator is
+Nothing. It is five files of JavaScript, served as they are. The emulator is
 copied in from my [CHIP-8 project](https://github.com/HarianthK/chip8), which
 runs every program in the community archive.
