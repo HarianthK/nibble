@@ -132,6 +132,20 @@ games/broken.nib:2: no sprite called nope
   draw nope at x, 2
 ```
 
+## Deploying
+
+```bash
+node scripts/deploy.mjs
+```
+
+Two things make this worth having over `vercel deploy --prod`. The Vercel CLI
+answers "Not authorized" on a first call often enough to be normal, and the same
+call straight after goes through, so the script retries once before giving up.
+More importantly it then fetches every file back from the live site and compares
+it against the copy on disk, because a deploy that reports success while the
+site still serves the previous version is the failure that actually costs you
+time. It only says the deploy worked once the site proves it.
+
 ## How it works
 
 Three passes, all in `compile.js`.
