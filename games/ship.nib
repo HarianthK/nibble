@@ -1,0 +1,15 @@
+# Arrow around the screen with W A S D.
+sprite ship [ 0x60 0xF0 0x90 ]
+
+var x = 30
+var y = 14
+
+loop {
+  clear
+  if key(A) { x -= 1 }
+  if key(D) { x += 1 }
+  if key(W) { y -= 1 }
+  if key(S) { y += 1 }
+  draw ship at x, y
+  wait
+}

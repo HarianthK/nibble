@@ -1,0 +1,21 @@
+# No input. The ball turns around at the edges.
+sprite ball [ 0x60 0xF0 0xF0 0x60 ]
+
+var x = 10
+var y = 8
+var dx = 1
+var dy = 1
+
+loop {
+  clear
+  draw ball at x, y
+
+  if x == 59 { dx = 0 }
+  if x == 0  { dx = 1 }
+  if y == 27 { dy = 0 }
+  if y == 0  { dy = 1 }
+
+  if dx == 1 { x += 1 } else { x -= 1 }
+  if dy == 1 { y += 1 } else { y -= 1 }
+  wait
+}

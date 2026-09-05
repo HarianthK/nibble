@@ -1,0 +1,16 @@
+# W A S D draws a trail, X wipes it.
+# It only draws where it moves, because drawing the same
+# spot twice would rub the pixel out again.
+sprite pen [ 0x80 ]
+
+var x = 32
+var y = 16
+
+loop {
+  if key(A) { x -= 1  draw pen at x, y }
+  if key(D) { x += 1  draw pen at x, y }
+  if key(W) { y -= 1  draw pen at x, y }
+  if key(S) { y += 1  draw pen at x, y }
+  if key(X) { clear }
+  wait
+}

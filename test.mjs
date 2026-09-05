@@ -1,5 +1,7 @@
 // Compiles each program and runs it on the emulator, then checks the screen.
 // Run: node test.mjs
+import { execFileSync } from "node:child_process"
+import { readFileSync, writeFileSync, rmSync } from "node:fs"
 import { compile } from "./compile.js"
 import { Chip8, WIDTH } from "./chip8.js"
 
@@ -277,6 +279,52 @@ check("a real program compiles to something the machine accepts", () => {
   assert(!error, `compiler complained: ${error && error.message}`)
   assert(bytes.length > 20, "suspiciously short output")
   assert(bytes.length % 2 === 1 || true, "")
+})
+
+check("the command line tool writes a ROM that matches the compiler", () => {
+  const source = `
+    sprite dot [ 0x80 ]
+    var x = 9
+    draw dot at x, 3
+    halt
+  `
+  writeFileSync("__tmp.nib", source)
+  try {
+    execFileSync("node", ["nibble.mjs", "__tmp.nib", "-o", "__tmp.ch8"], { stdio: "pipe" })
+    const onDisk = new Uint8Array(readFileSync("__tmp.ch8"))
+    const inMemory = compile(source).bytes
+    assert(onDisk.length === inMemory.length, "the file is a different length to the compiler's output")
+    for (let i = 0; i < onDisk.length; i++) {
+      assert(onDisk[i] === inMemory[i], `byte ${i} differs between the file and the compiler`)
+    }
+    // And the file the tool wrote runs on the machine.
+    const cpu = new Chip8()
+    cpu.load(onDisk)
+    for (let i = 0; i < 200 && !cpu.halted; i++) cpu.step()
+    assert(on(cpu, 9, 3), "the ROM from the file did not draw where it should")
+  } finally {
+    rmSync("__tmp.nib", { force: true })
+    rmSync("__tmp.ch8", { force: true })
+  }
+})
+
+check("the command line tool refuses a broken program and says where", () => {
+  writeFileSync("__bad.nib", ["var x = 1", "draw nope at x, 2", ""].join("\n"))
+  try {
+    let failed = false
+    let output = ""
+    try {
+      execFileSync("node", ["nibble.mjs", "__bad.nib", "-o", "__bad.ch8"], { stdio: "pipe" })
+    } catch (err) {
+      failed = true
+      output = String(err.stderr)
+    }
+    assert(failed, "a broken program should have made the tool exit with a failure")
+    assert(output.includes(":2:"), `the error should name line 2, got: ${output.trim()}`)
+  } finally {
+    rmSync("__bad.nib", { force: true })
+    rmSync("__bad.ch8", { force: true })
+  }
 })
 
 check("mistakes are reported with a line number", () => {

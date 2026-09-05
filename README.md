@@ -108,6 +108,30 @@ node test.mjs
 
 Then open <http://localhost:3120>.
 
+## Compiling to a file
+
+The browser is not the only way in. The command line tool writes a plain `.ch8`
+ROM, which any CHIP-8 interpreter will run.
+
+```bash
+node nibble.mjs games/catch.nib
+# games/catch.ch8  153 bytes
+```
+
+The four example programs are in `games/` as `.nib` source, with their compiled
+ROMs beside them. Drop one into
+[the emulator](https://harianthk.github.io/chip8) under "Load a program" and it
+plays, with no mention of Nibble anywhere in the file. A test compiles the same
+program both ways and compares the output byte for byte, so the tool and the
+playground cannot drift apart.
+
+Mistakes name the file, the line, and the line's text:
+
+```
+games/broken.nib:2: no sprite called nope
+  draw nope at x, 2
+```
+
 ## How it works
 
 Three passes, all in `compile.js`.
