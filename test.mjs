@@ -281,6 +281,75 @@ check("a real program compiles to something the machine accepts", () => {
   assert(bytes.length % 2 === 1 || true, "")
 })
 
+check("a routine can be defined once and called several times", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var x = 0
+    def mark {
+      draw dot at x, 4
+    }
+    x = 5
+    mark
+    x = 9
+    mark
+    x = 20
+    mark
+    halt
+  `)
+  for (const x of [5, 9, 20]) assert(on(cpu, x, 4), `the routine did not draw at column ${x}`)
+  assert(litCount(cpu) === 3, `expected 3 marks, found ${litCount(cpu)}`)
+})
+
+check("the body of a routine is not run where it is written", () => {
+  // The definition sits in the middle of the program and must be stepped over.
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    def never {
+      draw dot at 30, 30
+    }
+    halt
+  `)
+  assert(!on(cpu, 30, 30), "the routine ran even though it was never called")
+  assert(litCount(cpu) === 0, "something was drawn when nothing should have been")
+})
+
+check("a routine can be called before it is defined", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var x = 7
+    early
+    halt
+    def early {
+      draw dot at x, 2
+    }
+  `)
+  assert(on(cpu, 7, 2), "the call did not reach a routine defined further down")
+})
+
+check("routines can call other routines", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var x = 1
+    def inner {
+      draw dot at x, 6
+    }
+    def outer {
+      inner
+      x = 3
+      inner
+    }
+    outer
+    halt
+  `)
+  assert(on(cpu, 1, 6) && on(cpu, 3, 6), "the nested call did not draw both marks")
+})
+
+check("calling something that does not exist names the line", () => {
+  const { error } = compile(["var x = 1", "missing", "halt", ""].join("\n"))
+  assert(error, "calling an undefined routine should be an error")
+  assert(error.line === 2, `expected the error on line 2, got line ${error.line}`)
+})
+
 check("the command line tool writes a ROM that matches the compiler", () => {
   const source = `
     sprite dot [ 0x80 ]

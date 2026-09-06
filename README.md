@@ -86,6 +86,23 @@ loop { ... }
 while x != 10 { ... }
 ```
 
+**Routines** let you name a piece of code and use it more than once. Call one by
+writing its name on a line of its own. A routine can be called before it appears
+in the file, and it can call other routines.
+
+```
+def newBlock {
+  by = 6
+  rand bx, 0x3F
+}
+
+newBlock
+```
+
+There are no parameters and no local variables. Routines work on the same
+thirteen variables everything else does, because those are the machine's
+registers and there is nowhere else to put anything.
+
 **Numbers on screen.** `show score at 1, 0` writes a variable out as up to
 three digits, using the font built into the machine. That is how a game gets a
 score.
@@ -194,6 +211,12 @@ per animation frame is right only on a sixty hertz screen: on a 120Hz monitor
 every program would run at double speed. The elapsed milliseconds are
 accumulated instead, so a second of real time is sixty ticks whatever the screen
 is doing.
+
+**A definition sits in the middle of the program and has to be stepped over.**
+The machine starts at the top and runs forwards, so a routine written halfway
+down would otherwise be executed on the way past. Each definition is preceded by
+a jump over its own body, patched once the body has been compiled and its length
+is known.
 
 **Errors carry a line number** and name what was expected. A compiler that says
 only "syntax error" is a compiler you argue with.

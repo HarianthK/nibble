@@ -39,6 +39,8 @@ loop {
 }`,
 
   "Catch the falling block": `# A and D to move. The score is at the top.
+# newBlock is a routine, so the two lines that start a
+# fresh block are written once and called twice.
 sprite paddle [ 0xF8 ]
 sprite block  [ 0xC0 0xC0 ]
 
@@ -46,6 +48,11 @@ var px = 28
 var bx = 20
 var by = 6
 var score = 0
+
+def newBlock {
+  by = 6
+  rand bx, 0x3F
+}
 
 loop {
   clear
@@ -63,14 +70,10 @@ loop {
   if hit {
     score += 1
     beep 3
-    by = 6
-    rand bx, 0x3F
+    newBlock
   }
 
-  if by > 30 {
-    by = 6
-    rand bx, 0x3F
-  }
+  if by > 30 { newBlock }
   wait
 }`,
 

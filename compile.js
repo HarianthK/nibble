@@ -54,6 +54,8 @@ export function compile(source) {
 
   const vars = new Map()
   const sprites = new Map()
+  const routines = new Map()
+  const calls = []
   const code = []
   const fixups = []
   // Six bytes of working memory, only reserved if a program shows a number.
@@ -302,7 +304,28 @@ export function compile(source) {
       return
     }
 
-    // Anything else has to be an assignment to a variable.
+    if (word === "def") {
+      next()
+      const name = next()
+      if (routines.has(name)) throw new Fault(`${name} is already a routine`, ln)
+      if (vars.has(name)) throw new Fault(`${name} is already a variable`, ln)
+      // The body sits in the middle of the program, so step over it.
+      const skip = emit(0x1000)
+      routines.set(name, here())
+      block()
+      emit(0x00ee)
+      code[skip] = 0x1000 | here()
+      return
+    }
+
+    // A name on its own is a call. A name followed by an operator is not.
+    if (isName(word) && !["=", "+=", "-="].includes(tokens[at + 1]?.text)) {
+      const name = next()
+      const slot = emit(0x2000)
+      calls.push({ slot, name, line: ln })
+      return
+    }
+
     if (isName(word)) {
       const name = next()
       const target = reg(name, ln)
@@ -356,6 +379,15 @@ export function compile(source) {
       placed.set(name, PROGRAM_START + bytes.length)
       bytes.push(...rows)
     }
+    for (const { slot, name, line: ln } of calls) {
+      const address = routines.get(name)
+      if (address === undefined) throw new Fault(`nothing here is called ${name}`, ln)
+      const word = 0x2000 | address
+      code[slot] = word
+      bytes[slot * 2] = (word >> 8) & 0xff
+      bytes[slot * 2 + 1] = word & 0xff
+    }
+
     const scratchAt = PROGRAM_START + bytes.length
     if (needsScratch) bytes.push(0, 0, 0, 0, 0, 0)
     for (const { slot, name, scratch, line: ln } of fixups) {
