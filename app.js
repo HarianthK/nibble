@@ -19,7 +19,9 @@ const examples = document.getElementById("examples")
 const pad = document.getElementById("pad")
 
 let running = false
-const SPEED = 600
+// Fast enough for a whole game loop to finish inside one animation frame,
+// or the screen gets painted after the clear but before the drawing.
+const SPEED = 6000
 
 function paint() {
   const across = cpu.width

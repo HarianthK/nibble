@@ -1,7 +1,7 @@
 // The programs offered in the playground. Each one compiles and runs as it is.
 export const EXAMPLES = {
   "Meteors": `# Meteors. A and D to move, dodge the falling rocks.
-# You have three lives. The score counts the rocks you outlast.
+# Three lives. When it ends, your score is on screen and E plays again.
 
 sprite ship [ 0x60 0xF0 0x90 ]
 sprite rock [ 0xC0 0xC0 ]
@@ -26,41 +26,48 @@ def dropB {
   score += 1
 }
 
-def gameover {
-  clear
-  show score at 28, 13
-  halt
-}
-
 loop {
-  clear
+  px = 30
+  ax = 10
+  ay = 0
+  bx = 40
+  by = 14
+  score = 0
+  lives = 3
 
-  if key(A) { px -= 1 }
-  if key(D) { px += 1 }
-  if px > 60 { px = 60 }
-  if px < 1  { px = 1 }
+  while lives != 0 {
+    clear
 
-  ay += 1
-  by += 1
-  if ay > 29 { dropA }
-  if by > 29 { dropB }
+    if key(A) { px -= 1 }
+    if key(D) { px += 1 }
+    if px > 60 { px = 60 }
+    if px < 1  { px = 1 }
 
-  # The rocks go down first, then the ship on top, so one check of hit
-  # asks only whether the ship ran into something.
-  draw rock at ax, ay
-  draw rock at bx, by
-  draw ship at px, 28
+    ay += 1
+    by += 1
+    if ay > 29 { dropA }
+    if by > 29 { dropB }
 
-  if hit {
-    lives -= 1
-    beep 6
-    dropA
-    dropB
-    if lives == 0 { gameover }
+    # The rocks go down first and the ship last, so one check of hit asks
+    # only whether the ship ran into something.
+    draw rock at ax, ay
+    draw rock at bx, by
+    draw ship at px, 28
+
+    if hit {
+      lives -= 1
+      beep 6
+      dropA
+      dropB
+    }
+
+    show score at 1, 0
+    wait
   }
 
-  show score at 1, 0
-  wait
+  clear
+  show score at 28, 13
+  while !key(E) { wait }
 }`,
 
   "Move a ship": `# Arrow around the screen with W A S D.
