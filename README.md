@@ -135,8 +135,10 @@ node nibble.mjs games/catch.nib
 # games/catch.ch8  153 bytes
 ```
 
-The four example programs are in `games/` as `.nib` source, with their compiled
-ROMs beside them. Drop one into
+The example programs are in `games/` as `.nib` source, with their compiled ROMs
+beside them. `meteors.nib` is the fullest of them: a dodging game with a score,
+three lives and a game over screen, in 251 bytes. It uses most of the language,
+including routines to start a fresh rock and to end the game. Drop one into
 [the emulator](https://harianthk.github.io/chip8) under "Load a program" and it
 plays, with no mention of Nibble anywhere in the file. A test compiles the same
 program both ways and compares the output byte for byte, so the tool and the
