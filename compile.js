@@ -14,6 +14,32 @@ const KEYS = {
   Z: 0xa, X: 0x0, C: 0xb, V: 0xf,
 }
 
+// A four by five letter for every character `print` can write. Only the ones a
+// program actually uses are put in the output.
+const LETTERS = {
+  A: [0x60, 0x90, 0xf0, 0x90, 0x90], B: [0xe0, 0x90, 0xe0, 0x90, 0xe0],
+  C: [0x70, 0x80, 0x80, 0x80, 0x70], D: [0xe0, 0x90, 0x90, 0x90, 0xe0],
+  E: [0xf0, 0x80, 0xe0, 0x80, 0xf0], F: [0xf0, 0x80, 0xe0, 0x80, 0x80],
+  G: [0x70, 0x80, 0xb0, 0x90, 0x70], H: [0x90, 0x90, 0xf0, 0x90, 0x90],
+  I: [0xe0, 0x40, 0x40, 0x40, 0xe0], J: [0x30, 0x10, 0x10, 0x90, 0x60],
+  K: [0x90, 0xa0, 0xc0, 0xa0, 0x90], L: [0x80, 0x80, 0x80, 0x80, 0xf0],
+  M: [0x90, 0xf0, 0xf0, 0x90, 0x90], N: [0x90, 0xd0, 0xb0, 0x90, 0x90],
+  O: [0x60, 0x90, 0x90, 0x90, 0x60], P: [0xe0, 0x90, 0xe0, 0x80, 0x80],
+  Q: [0x60, 0x90, 0x90, 0xb0, 0x70], R: [0xe0, 0x90, 0xe0, 0xa0, 0x90],
+  S: [0x70, 0x80, 0x60, 0x10, 0xe0], T: [0xe0, 0x40, 0x40, 0x40, 0x40],
+  U: [0x90, 0x90, 0x90, 0x90, 0x60], V: [0x90, 0x90, 0x90, 0x60, 0x60],
+  W: [0x90, 0x90, 0xf0, 0xf0, 0x90], X: [0x90, 0x90, 0x60, 0x90, 0x90],
+  Y: [0x90, 0x90, 0x60, 0x40, 0x40], Z: [0xf0, 0x10, 0x60, 0x80, 0xf0],
+  "0": [0x60, 0x90, 0x90, 0x90, 0x60], "1": [0x40, 0xc0, 0x40, 0x40, 0xe0],
+  "2": [0xe0, 0x10, 0x60, 0x80, 0xf0], "3": [0xe0, 0x10, 0x60, 0x10, 0xe0],
+  "4": [0x90, 0x90, 0xf0, 0x10, 0x10], "5": [0xf0, 0x80, 0xe0, 0x10, 0xe0],
+  "6": [0x60, 0x80, 0xe0, 0x90, 0x60], "7": [0xf0, 0x10, 0x20, 0x40, 0x40],
+  "8": [0x60, 0x90, 0x60, 0x90, 0x60], "9": [0x60, 0x90, 0x70, 0x10, 0x60],
+  "!": [0x40, 0x40, 0x40, 0x00, 0x40], "?": [0xe0, 0x10, 0x60, 0x00, 0x40],
+  ".": [0x00, 0x00, 0x00, 0x00, 0x40], ",": [0x00, 0x00, 0x00, 0x40, 0x80],
+  "-": [0x00, 0x00, 0xf0, 0x00, 0x00], ":": [0x00, 0x40, 0x00, 0x40, 0x00],
+}
+
 class Fault extends Error {
   constructor(message, line) {
     super(message)
@@ -26,10 +52,15 @@ function lex(source) {
   const lines = source.split("\n")
   lines.forEach((text, index) => {
     const line = index + 1
-    const stripped = text.split("#")[0]
+    let stripped = text
+    let quoted = false
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '"') quoted = !quoted
+      if (text[i] === "#" && !quoted) { stripped = text.slice(0, i); break }
+    }
     // The two character operators have to be tried before the single ones, or
     // != would come out as ! followed by =.
-    const re = /\s*([A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|[+\-]=|[=!<>]=|[=+\-*!<>])/g
+    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|[+\-]=|[=!<>]=|[=+\-*!<>])/g
     let m
     while ((m = re.exec(stripped))) tokens.push({ text: m[1], line })
     tokens.push({ text: "\n", line })
@@ -56,6 +87,7 @@ export function compile(source) {
   const sprites = new Map()
   const routines = new Map()
   const calls = []
+  const glyphs = new Map()
   const code = []
   const fixups = []
   // Six bytes of working memory, only reserved if a program shows a number.
@@ -68,8 +100,15 @@ export function compile(source) {
     fixups.push({ slot, name, line: ln })
   }
 
-  // The machine writes decimal digits into memory, so showing a number needs
-  // somewhere to put them and somewhere to park the registers it borrows.
+  // Each letter is a five row sprite, laid down after the code like any other.
+  const glyphRef = (ch) => {
+    if (!glyphs.has(ch)) glyphs.set(ch, LETTERS[ch])
+    const slot = emit(0xa000)
+    fixups.push({ slot, glyph: ch })
+  }
+
+  // Showing a number needs somewhere to put its digits and somewhere to park
+  // the registers that reading them back borrows.
   const scratchRef = (offset) => {
     const slot = emit(0xa000)
     fixups.push({ slot, scratch: offset })
@@ -267,6 +306,35 @@ export function compile(source) {
       return
     }
 
+    if (word === "print") {
+      next()
+      const text = next()
+      if (!text.startsWith('"')) throw new Fault(`print wants some words in quotes, found ${text}`, ln)
+      eat("at")
+      const xTok = next()
+      eat(",")
+      const yTok = next()
+
+      const put = (which, tok) => {
+        if (isName(tok)) emit(0x8000 | (which << 8) | (reg(tok, ln) << 4))
+        else emit(0x6000 | (which << 8) | (number(tok, ln) & 0xff))
+      }
+      put(SCRATCH_A, xTok)
+      put(SCRATCH_B, yTok)
+
+      for (const raw of text.slice(1, -1)) {
+        const ch = raw.toUpperCase()
+        if (ch !== " ") {
+          if (!(ch in LETTERS)) throw new Fault(`there is no letter for ${raw}`, ln)
+          glyphRef(ch)
+          emit(0xd005 | (SCRATCH_A << 8) | (SCRATCH_B << 4))
+        }
+        // Step along whether or not anything was drawn, so spaces take room.
+        emit(0x7000 | (SCRATCH_A << 8) | 5)
+      }
+      return
+    }
+
     if (word === "loop") {
       next()
       const top = here()
@@ -390,8 +458,15 @@ export function compile(source) {
 
     const scratchAt = PROGRAM_START + bytes.length
     if (needsScratch) bytes.push(0, 0, 0, 0, 0, 0)
-    for (const { slot, name, scratch, line: ln } of fixups) {
-      const address = scratch === undefined ? placed.get(name) : scratchAt + scratch
+    const glyphAt = new Map()
+    for (const [ch, rows] of glyphs) {
+      glyphAt.set(ch, PROGRAM_START + bytes.length)
+      bytes.push(...rows)
+    }
+    for (const { slot, name, scratch, glyph, line: ln } of fixups) {
+      const address = glyph !== undefined
+        ? glyphAt.get(glyph)
+        : scratch === undefined ? placed.get(name) : scratchAt + scratch
       if (address === undefined) throw new Fault(`no sprite called ${name}`, ln)
       const word = 0xa000 | address
       bytes[slot * 2] = (word >> 8) & 0xff

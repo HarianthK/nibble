@@ -351,12 +351,57 @@ check("calling something that does not exist names the line", () => {
   assert(error.line === 2, `expected the error on line 2, got line ${error.line}`)
 })
 
+check("print puts words on screen where it is told", () => {
+  const cpu = run(`print "HI" at 4, 6
+halt`)
+  // Two letters, four wide and five tall, starting at column 4.
+  let inside = 0, outside = 0
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 64; x++) {
+    if (!on(cpu, x, y)) continue
+    if (y >= 6 && y < 11 && x >= 4 && x < 14) inside++
+    else outside++
+  }
+  assert(inside > 10, `expected letters in the band asked for, found ${inside} lit pixels`)
+  assert(outside === 0, `${outside} pixels were drawn outside where print was told to write`)
+})
+
+check("different words look different", () => {
+  const shot = (words) => run(`print "${words}" at 1, 1
+halt`).display.join("")
+  assert(shot("YES") !== shot("NO"), "two different words came out identical")
+  assert(shot("A") !== shot("B"), "A and B came out identical")
+  assert(shot("HI") === shot("hi"), "lower case should read the same as upper")
+})
+
+check("a space takes room without drawing", () => {
+  const gap = run(`print "A A" at 1, 1
+halt`)
+  const together = run(`print "AA" at 1, 1
+halt`)
+  assert(gap.display.join("") !== together.display.join(""), "the space made no difference")
+  const count = (c) => c.display.reduce((a, b) => a + b, 0)
+  assert(count(gap) === count(together), "a space should draw nothing, so the pixel count should match")
+})
+
+check("only the letters a program uses are carried", () => {
+  const few = compile(`print "A" at 1, 1
+halt`).bytes.length
+  const many = compile(`print "ABCDEFGH" at 1, 1
+halt`).bytes.length
+  assert(many > few, "using more letters should make a bigger program")
+  // One letter is five bytes, so eight of them cannot cost the whole alphabet.
+  assert(many - few < 26 * 5, `the whole font looks like it went in: ${many - few} bytes for seven more letters`)
+})
+
+check("a letter with no shape is refused, with its line", () => {
+  const { error } = compile(["var x = 1", 'print "hello~" at 1, 1'].join(String.fromCharCode(10)))
+  assert(error, "an unknown character should be an error")
+  assert(error.line === 2, `expected line 2, got ${error.line}`)
+})
+
 check("the examples behave the same on any interpreter", () => {
-  // Interpreters disagree about six instructions. A program that leans on one
-  // of them would behave differently elsewhere, so the output has to match
-  // under every combination.
-  // Display wait is left out on purpose and checked separately below, because
-  // it changes how fast a program runs rather than what it computes.
+  // Interpreters disagree about six instructions, so the output has to match
+  // whichever way round each one is set. Display wait is checked separately.
   const QUIRKS = ["shift", "loadStore", "logic", "clip", "jump", "vfOrder"]
   const real = Math.random
 
@@ -390,9 +435,8 @@ check("the examples behave the same on any interpreter", () => {
 })
 
 check("display wait slows a program down without changing it", () => {
-  // The oldest machines drew once per sixtieth of a second. Meteors draws three
-  // sprites a loop, so on such a machine it takes three times as long to reach
-  // the same place, rather than doing anything different.
+  // Meteors draws three sprites a loop, so a machine that draws once per
+  // sixtieth of a second takes three times as long to reach the same place.
   const real = Math.random
   const picture = (quirks, frames) => {
     let seed = 12345

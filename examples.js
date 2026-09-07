@@ -1,7 +1,7 @@
 // The programs offered in the playground. Each one compiles and runs as it is.
 export const EXAMPLES = {
   "Meteors": `# Meteors. A and D to move, dodge the falling rocks.
-# Three lives. When it ends, your score is on screen and E plays again.
+# Three lives, then it tells you the score and E plays again.
 
 sprite ship [ 0x60 0xF0 0x90 ]
 sprite rock [ 0xC0 0xC0 ]
@@ -68,7 +68,10 @@ loop {
   }
 
   clear
-  show score at 28, 13
+  print "GAME OVER" at 10, 6
+  print "SCORE" at 10, 14
+  show score at 36, 14
+  print "E TO PLAY" at 10, 22
   while !key(E) { wait }
 }`,
 

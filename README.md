@@ -107,6 +107,11 @@ registers and there is nowhere else to put anything.
 three digits, using the font built into the machine. That is how a game gets a
 score.
 
+**Words on screen.** `print "GAME OVER" at 10, 6` writes text, four pixels wide
+and five tall per letter. Letters, digits and a little punctuation are all
+there, and only the characters a program actually uses are carried in the
+output, so a program saying one word does not pay for the whole alphabet.
+
 **The rest.** `clear` wipes the screen. `wait` holds until the next sixtieth of
 a second, which is how you get a steady frame rate. `rand name, 0x3F` puts a
 random number in a variable. `beep 4` makes a noise. `halt` stops.
