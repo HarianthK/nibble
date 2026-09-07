@@ -68,7 +68,7 @@ loop {
   clear
   print "GAME OVER" at 10, 6
   print "SCORE" at 10, 14
-  show score at 36, 14
+  show score at 40, 14
   print "E TO PLAY" at 10, 22
   while !key(E) { wait }
 }
