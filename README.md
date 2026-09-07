@@ -183,6 +183,27 @@ is filled in. Same for `while`, `else`, and for sprite addresses, which are only
 settled once every instruction has been counted and the sprites are laid out
 after the code.
 
+## Running the same everywhere
+
+Interpreters disagree about six instructions, and a program leaning on one of
+them behaves differently depending on where you run it. Saying the output "runs
+on any interpreter" is only worth saying if it has been checked, so a test
+compiles every example and runs it under each setting both ways round, comparing
+the screens.
+
+That test found two real faults, both in the games rather than the compiler.
+Both scattered a two pixel wide sprite with `rand` up to column 63, so it
+straddled the right edge and either wrapped or was cut off. And the catch game
+let its block reach the bottom row, where wrapping put it back on top of the
+score and counted as a catch. Neither would have shown up here, because this
+emulator wraps; they would have appeared for somebody else.
+
+Display wait is the exception and is checked separately. It made the oldest
+machines draw once per sixtieth of a second, so Meteors, which draws three
+sprites a loop, takes three times as long to reach the same place. The test
+checks exactly that: the same picture, the same score and the same lives after
+three times as many frames.
+
 ## Decisions worth knowing
 
 **Thirteen variables, not sixteen.** The machine has sixteen registers. `VF` is

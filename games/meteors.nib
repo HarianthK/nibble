@@ -15,12 +15,14 @@ var lives = 3
 def dropA {
   ay = 0
   rand ax, 0x3F
+  if ax > 61 { ax = 61 }
   score += 1
 }
 
 def dropB {
   by = 0
   rand bx, 0x3F
+  if bx > 61 { bx = 61 }
   score += 1
 }
 

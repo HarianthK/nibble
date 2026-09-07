@@ -12,6 +12,7 @@ var score = 0
 def newBlock {
   by = 6
   rand bx, 0x3F
+  if bx > 61 { bx = 61 }
 }
 
 loop {
@@ -24,6 +25,9 @@ loop {
   if px < 1  { px = 1 }
 
   by += 1
+  # Send the block back up before it reaches the bottom row, or it would
+  # wrap round onto the score and count as a catch.
+  if by > 29 { newBlock }
 
   draw paddle at px, 30
   draw block at bx, by
@@ -32,7 +36,5 @@ loop {
     beep 3
     newBlock
   }
-
-  if by > 30 { newBlock }
   wait
 }

@@ -17,12 +17,14 @@ var lives = 3
 def dropA {
   ay = 0
   rand ax, 0x3F
+  if ax > 61 { ax = 61 }
   score += 1
 }
 
 def dropB {
   by = 0
   rand bx, 0x3F
+  if bx > 61 { bx = 61 }
   score += 1
 }
 
@@ -122,6 +124,7 @@ var score = 0
 def newBlock {
   by = 6
   rand bx, 0x3F
+  if bx > 61 { bx = 61 }
 }
 
 loop {
@@ -134,6 +137,9 @@ loop {
   if px < 1  { px = 1 }
 
   by += 1
+  # Send the block back up before it reaches the bottom row, or it would
+  # wrap round onto the score and count as a catch.
+  if by > 29 { newBlock }
 
   draw paddle at px, 30
   draw block at bx, by
@@ -142,8 +148,6 @@ loop {
     beep 3
     newBlock
   }
-
-  if by > 30 { newBlock }
   wait
 }`,
 

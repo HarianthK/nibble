@@ -3,6 +3,7 @@
 import { execFileSync } from "node:child_process"
 import { readFileSync, writeFileSync, rmSync } from "node:fs"
 import { compile } from "./compile.js"
+import { EXAMPLES } from "./examples.js"
 import { Chip8, WIDTH } from "./chip8.js"
 
 let passed = 0
@@ -348,6 +349,75 @@ check("calling something that does not exist names the line", () => {
   const { error } = compile(["var x = 1", "missing", "halt", ""].join("\n"))
   assert(error, "calling an undefined routine should be an error")
   assert(error.line === 2, `expected the error on line 2, got line ${error.line}`)
+})
+
+check("the examples behave the same on any interpreter", () => {
+  // Interpreters disagree about six instructions. A program that leans on one
+  // of them would behave differently elsewhere, so the output has to match
+  // under every combination.
+  // Display wait is left out on purpose and checked separately below, because
+  // it changes how fast a program runs rather than what it computes.
+  const QUIRKS = ["shift", "loadStore", "logic", "clip", "jump", "vfOrder"]
+  const real = Math.random
+
+  const picture = (bytes, quirks) => {
+    // Seeded, because rand would otherwise make two runs differ by itself.
+    let seed = 12345
+    Math.random = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+    const cpu = new Chip8()
+    Object.assign(cpu.quirks, quirks)
+    cpu.load(bytes)
+    for (let f = 0; f < 120; f++) {
+      for (let i = 0; i < 60 && !cpu.halted; i++) cpu.step()
+      cpu.tickTimers()
+    }
+    return cpu.display.join("")
+  }
+
+  try {
+    for (const [name, source] of Object.entries(EXAMPLES)) {
+      const { bytes, error } = compile(source)
+      assert(!error, `${name} did not compile: ${error && error.message}`)
+      const base = picture(bytes, {})
+      for (const q of QUIRKS) {
+        const flipped = picture(bytes, { [q]: true })
+        assert(flipped === base, `${name} comes out differently when ${q} is set the other way`)
+      }
+    }
+  } finally {
+    Math.random = real
+  }
+})
+
+check("display wait slows a program down without changing it", () => {
+  // The oldest machines drew once per sixtieth of a second. Meteors draws three
+  // sprites a loop, so on such a machine it takes three times as long to reach
+  // the same place, rather than doing anything different.
+  const real = Math.random
+  const picture = (quirks, frames) => {
+    let seed = 12345
+    Math.random = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+    const cpu = new Chip8()
+    Object.assign(cpu.quirks, quirks)
+    cpu.load(compile(EXAMPLES.Meteors).bytes)
+    for (let f = 0; f < frames; f++) {
+      for (let i = 0; i < 60 && !cpu.halted; i++) cpu.step()
+      cpu.tickTimers()
+    }
+    return { picture: cpu.display.join(""), score: cpu.v[5], lives: cpu.v[6] }
+  }
+  try {
+    const quick = picture({}, 120)
+    const slow = picture({ vBlank: true }, 360)
+    assert(slow.picture === quick.picture, "three times as long did not reach the same picture")
+    assert(slow.score === quick.score, `score differs: ${slow.score} against ${quick.score}`)
+    assert(slow.lives === quick.lives, `lives differ: ${slow.lives} against ${quick.lives}`)
+    // And it really is slower, rather than the setting doing nothing at all.
+    const sameTime = picture({ vBlank: true }, 120)
+    assert(sameTime.picture !== quick.picture, "display wait made no difference, so this test proves nothing")
+  } finally {
+    Math.random = real
+  }
 })
 
 check("the command line tool writes a ROM that matches the compiler", () => {

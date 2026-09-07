@@ -66,6 +66,17 @@ export class Chip8 {
     this.hires = false
     // FX75/FX85 save and restore these across a program, but not a reset.
     this.flags = this.flags ?? new Uint8Array(8)
+    // Programs disagree about a handful of instructions. See the README.
+    // These are the settings used when a program says nothing.
+    this.quirks = this.quirks ?? {
+      shift: false,
+      loadStore: false,
+      logic: false,
+      clip: false,
+      jump: false,
+      vfOrder: false,
+      vBlank: false,
+    }
     // XO-CHIP draws into two overlaid bitplanes, so a pixel holds 0 to 3.
     this.plane = 1
     // Sixteen bytes of waveform and the rate to play them at.
@@ -94,6 +105,7 @@ export class Chip8 {
 
   // The timers tick at 60Hz regardless of how fast instructions run.
   tickTimers() {
+    this.drewThisFrame = false
     if (this.delay > 0) this.delay--
     if (this.sound > 0) this.sound--
   }
@@ -176,9 +188,17 @@ export class Chip8 {
 
       case 0x9000: if (this.v[x] !== this.v[y]) this.pc += 2; break
       case 0xa000: this.i = nnn; break
-      case 0xb000: this.pc = (nnn + this.v[0]) & 0xfff; break
+      case 0xb000:
+        this.pc = (nnn + this.v[this.quirks.jump ? (nnn >> 8) & 0xf : 0]) & 0xfff
+        break
       case 0xc000: this.v[x] = Math.floor(Math.random() * 256) & nn; break
-      case 0xd000: this.draw(this.v[x], this.v[y], n); break
+      case 0xd000:
+        // The oldest machines could only draw once per sixtieth of a second,
+        // and a few programs are written expecting to be held back like that.
+        if (this.quirks.vBlank && this.drewThisFrame) { this.pc -= 2; return }
+        this.draw(this.v[x], this.v[y], n)
+        this.drewThisFrame = true
+        break
 
       case 0xe000: {
         const asked = this.v[x] & 0xf
@@ -192,21 +212,36 @@ export class Chip8 {
     }
   }
 
+  // The result is written first and the flag after, because some programs read
+  // VF as an operand and then expect it to be overwritten.
+  writeCarry(dest, value, flag) {
+    this.v[dest] = value & 0xff
+    this.v[0xf] = flag ? 1 : 0
+    if (this.quirks.vfOrder) this.v[dest] = value & 0xff
+  }
+
   arithmetic(x, y, n) {
     const a = this.v[x]
     const b = this.v[y]
     switch (n) {
       case 0x0: this.v[x] = b; break
-      case 0x1: this.v[x] = a | b; break
-      case 0x2: this.v[x] = a & b; break
-      case 0x3: this.v[x] = a ^ b; break
-      // The carry flag is written after the result, and some programs rely on
-      // reading VF as an operand first, so the order matters.
-      case 0x4: this.v[x] = (a + b) & 0xff; this.v[0xf] = a + b > 0xff ? 1 : 0; break
-      case 0x5: this.v[x] = (a - b) & 0xff; this.v[0xf] = a >= b ? 1 : 0; break
-      case 0x6: this.v[x] = a >> 1; this.v[0xf] = a & 1; break
-      case 0x7: this.v[x] = (b - a) & 0xff; this.v[0xf] = b >= a ? 1 : 0; break
-      case 0xe: this.v[x] = (a << 1) & 0xff; this.v[0xf] = (a >> 7) & 1; break
+      case 0x1: this.v[x] = a | b; if (this.quirks.logic) this.v[0xf] = 0; break
+      case 0x2: this.v[x] = a & b; if (this.quirks.logic) this.v[0xf] = 0; break
+      case 0x3: this.v[x] = a ^ b; if (this.quirks.logic) this.v[0xf] = 0; break
+      case 0x4: this.writeCarry(x, a + b, a + b > 0xff); break
+      case 0x5: this.writeCarry(x, a - b, a >= b); break
+      // Shifting takes its operand from VY unless a program asks otherwise.
+      case 0x6: {
+        const from = this.quirks.shift ? a : b
+        this.writeCarry(x, from >> 1, from & 1)
+        break
+      }
+      case 0x7: this.writeCarry(x, b - a, b >= a); break
+      case 0xe: {
+        const from = this.quirks.shift ? a : b
+        this.writeCarry(x, from << 1, (from >> 7) & 1)
+        break
+      }
     }
   }
 
@@ -233,11 +268,14 @@ export class Chip8 {
         this.memory[(this.i + 1) & 0xffff] = Math.floor(this.v[x] / 10) % 10
         this.memory[(this.i + 2) & 0xffff] = this.v[x] % 10
         break
+      // I is left pointing past what was moved, unless a program asks otherwise.
       case 0x55:
         for (let r = 0; r <= x; r++) this.memory[(this.i + r) & 0xffff] = this.v[r]
+        if (!this.quirks.loadStore) this.i = (this.i + x + 1) & 0xffff
         break
       case 0x65:
         for (let r = 0; r <= x; r++) this.v[r] = this.memory[(this.i + r) & 0xffff]
+        if (!this.quirks.loadStore) this.i = (this.i + x + 1) & 0xffff
         break
       case 0x30: this.i = BIG_FONT_AT + (this.v[x] % 10) * 10; break
       case 0x75:
@@ -292,6 +330,8 @@ export class Chip8 {
       const py = (vy + row) % h
       for (let bit = 0; bit < span; bit++) {
         if (!(bits & (1 << (span - 1 - bit)))) continue
+        // Sprites wrap round the screen unless a program asks to be clipped.
+        if (this.quirks.clip && ((vx % w) + bit >= w || (vy % h) + row >= h)) continue
         const px = (vx + bit) % w
         const cell = py * WIDTH + px
         if (this.display[cell] & layer) this.v[0xf] = 1
