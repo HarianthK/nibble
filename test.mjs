@@ -315,6 +315,26 @@ check("a one-line if still calls its routine, and only when it should", () => {
   assert(litCount(cpu) === 2, `expected 2 marks, found ${litCount(cpu)}`)
 })
 
+check("two waits share one copy, one wait stays inline", () => {
+  const one = compile(`wait
+halt`).bytes.length
+  const two = compile(`wait
+wait
+halt`).bytes.length
+  // Inline is five words. Shared is a one word call each plus six words once.
+  assert(one === 12, `one wait should be 12 bytes, got ${one}`)
+  assert(two === 18, `two waits should be 18 bytes, got ${two}`)
+  // And the shared one still paces the program: see the counting test above.
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var n = 0
+    loop { wait wait n += 1 draw dot at n, 0 }
+  `, { frames: 20, perFrame: 200 })
+  // Ticks land at the end of a frame, so mark k is drawn in frame 2k+1 and
+  // frame 19 is the last that fits in twenty.
+  assert(litCount(cpu) === 9, `expected 9 marks after 20 frames of two waits each, found ${litCount(cpu)}`)
+})
+
 check("a routine can be defined once and called several times", () => {
   const cpu = run(`
     sprite dot [ 0x80 ]

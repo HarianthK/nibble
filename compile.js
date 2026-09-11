@@ -87,6 +87,17 @@ export function compile(source) {
   const sprites = new Map()
   const routines = new Map()
   const calls = []
+  // One tick of the delay timer, which the machine counts down at 60Hz.
+  const emitWait = () => {
+    emit(0x6000 | (SCRATCH_A << 8) | 1)
+    emit(0xf015 | (SCRATCH_A << 8))
+    const spin = here()
+    emit(0xf007 | (SCRATCH_A << 8))
+    emit(0x3000 | (SCRATCH_A << 8) | 0)
+    emit(0x1000 | spin)
+  }
+  const shareWait = tokens.filter((t) => t.text === "wait").length >= 2
+  const waitCalls = []
   const glyphs = new Map()
   const code = []
   const fixups = []
@@ -242,13 +253,9 @@ export function compile(source) {
 
     if (word === "wait") {
       next()
-      // One tick of the delay timer, which the machine counts down at 60Hz.
-      emit(0x6000 | (SCRATCH_A << 8) | 1)
-      emit(0xf015 | (SCRATCH_A << 8))
-      const spin = here()
-      emit(0xf007 | (SCRATCH_A << 8))
-      emit(0x3000 | (SCRATCH_A << 8) | 0)
-      emit(0x1000 | spin)
+      // Ten bytes inline, or a call to one shared copy once there are two.
+      if (shareWait) waitCalls.push(emit(0x2000))
+      else emitWait()
       return
     }
 
@@ -449,6 +456,12 @@ export function compile(source) {
     while (peek() !== "<end>") {
       statement()
       skipNewlines()
+    }
+    if (waitCalls.length) {
+      const at = here()
+      emitWait()
+      emit(0x00ee)
+      for (const slot of waitCalls) code[slot] = 0x2000 | at
     }
 
     // Sprites live after the code, which is why their addresses are only known

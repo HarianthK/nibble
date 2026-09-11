@@ -98,11 +98,18 @@ that jump. And it never treats a jump as a body, since `halt` is a jump to
 itself and would carry the wrong address after moving. A call as the body is
 fine, and the compiler moves the slot it will patch later along with it.
 
+`wait` is the other place bytes went. It is five words inline: set the delay
+timer, then spin reading it until it reaches zero. A program that waits twice
+or more now gets one copy of that at the end of its code, with a call in each
+place. A call is one word and the copy is six, so it pays for itself at two
+uses and is left inline at one. The compiler counts the `wait` tokens before it
+starts, which is simpler than deciding at the end and moving code about.
+
 The proof is not the unit test but a recording. Before the change, every
 example and game was compiled, run for six hundred frames under three key
 scripts with the random generator seeded, and every frame's screen hashed.
 After the change the hashes had to match exactly, and they do, while the
-programs got 92 bytes smaller between them. Breaking either half of the flip
+programs got 100 bytes smaller between them. Breaking either half of the flip
 on purpose makes the recording disagree, which is what makes it worth trusting.
 
 One thing that recording taught: it has to give each frame more instructions
