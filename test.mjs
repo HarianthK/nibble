@@ -282,6 +282,39 @@ check("a real program compiles to something the machine accepts", () => {
   assert(bytes.length % 2 === 1 || true, "")
 })
 
+check("an if with a one-line body costs a skip and nothing else", () => {
+  // The skip is flipped so the body sits where the jump used to be.
+  const { bytes } = compile(`
+    var x = 3
+    if x == 3 { x = 7 }
+    if key(A) { x -= 1 }
+    halt
+  `)
+  assert(bytes.length === 14, `expected 14 bytes, got ${bytes.length}`)
+  // 6003 4003 6007 6D07 EDA1 70FF halt: 3XNN became 4XNN, EX9E became EXA1.
+  const words = []
+  for (let i = 0; i < bytes.length; i += 2) words.push((bytes[i] << 8) | bytes[i + 1])
+  assert(words[1] === 0x4003 && words[4] === 0xeda1, `flipped skips came out as ${words[1].toString(16)} and ${words[4].toString(16)}`)
+})
+
+check("a one-line if still calls its routine, and only when it should", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var x = 0
+    var n = 0
+    def mark {
+      draw dot at x, 4
+      x += 2
+    }
+    if n == 0 { mark }
+    if n == 1 { mark }
+    if n != 1 { mark }
+    halt
+  `)
+  assert(on(cpu, 0, 4) && on(cpu, 2, 4), "the two calls that should run did not both draw")
+  assert(litCount(cpu) === 2, `expected 2 marks, found ${litCount(cpu)}`)
+})
+
 check("a routine can be defined once and called several times", () => {
   const cpu = run(`
     sprite dot [ 0x80 ]

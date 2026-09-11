@@ -94,6 +94,13 @@ export function compile(source) {
   let needsScratch = false
 
   const emit = (word) => { code.push(word & 0xffff); return code.length - 1 }
+  // Every skip the machine has comes in a pair, one taken when the other is not.
+  const flipSkip = (w) => {
+    const top = w & 0xf000
+    if (top === 0x3000 || top === 0x4000) return w ^ 0x7000
+    if (top === 0x5000 || top === 0x9000) return w ^ 0xc000
+    return w ^ 0x003f // EX9E and EXA1
+  }
   const here = () => PROGRAM_START + code.length * 2
   const spriteRef = (name, ln) => {
     const slot = emit(0xa000)
@@ -366,6 +373,12 @@ export function compile(source) {
         code[jumpOver] = 0x1000 | here()
         block()
         code[jumpPastElse] = 0x1000 | here()
+      } else if (code.length === jumpOver + 2 && (code[jumpOver + 1] & 0xf000) !== 0x1000) {
+        // A one-word body needs no jump: flip the skip and put the body
+        // where the jump was. See DOCS.md for why jumps are left alone.
+        code[jumpOver - 1] = flipSkip(code[jumpOver - 1])
+        code[jumpOver] = code.pop()
+        for (const c of calls) if (c.slot === jumpOver + 1) c.slot = jumpOver
       } else {
         code[jumpOver] = 0x1000 | here()
       }

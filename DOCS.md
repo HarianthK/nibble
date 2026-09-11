@@ -82,6 +82,34 @@ is known.
 **Errors carry a line number** and name what was expected. A compiler that says
 only "syntax error" is a compiler you argue with.
 
+## Making the output smaller
+
+The machine has no conditional jump, only a conditional skip of one
+instruction. So `if` used to compile to a skip that is taken when the
+condition holds, followed by a jump over the body: two words of overhead. But
+every skip comes in a pair. `3XNN` skips when equal and `4XNN` when not, `5XY0`
+and `9XY0` likewise, `EX9E` and `EXA1` for keys, and the flag tests are `3F00`
+and `4F00`. When the body is a single word, the compiler flips the skip and
+puts the body where the jump was. Overhead becomes one word.
+
+It only does this for an `if` with no `else`, because with an `else` the body
+has to be followed by a jump past the alternative, and a skip would land on
+that jump. And it never treats a jump as a body, since `halt` is a jump to
+itself and would carry the wrong address after moving. A call as the body is
+fine, and the compiler moves the slot it will patch later along with it.
+
+The proof is not the unit test but a recording. Before the change, every
+example and game was compiled, run for six hundred frames under three key
+scripts with the random generator seeded, and every frame's screen hashed.
+After the change the hashes had to match exactly, and they do, while the
+programs got 92 bytes smaller between them. Breaking either half of the flip
+on purpose makes the recording disagree, which is what makes it worth trusting.
+
+One thing that recording taught: it has to give each frame more instructions
+than the longest loop body, or it measures speed rather than behaviour. A
+smaller program gets further in thirty steps, and the two games with the
+longest loops showed as changed until every program was paced by its `wait`.
+
 ## A bug worth recording
 
 The lexer originally had no rule for a bare `!`, only for `!=`. So `!key(D)`

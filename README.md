@@ -25,7 +25,7 @@ loop {
 }
 ```
 
-That compiles to 61 bytes.
+That compiles to 53 bytes.
 
 ## Why
 
@@ -137,12 +137,12 @@ ROM, which any CHIP-8 interpreter will run.
 
 ```bash
 node nibble.mjs games/catch.nib
-# games/catch.ch8  153 bytes
+# games/catch.ch8  157 bytes
 ```
 
 The example programs are in `games/` as `.nib` source, with their compiled ROMs
 beside them. `meteors.nib` is the fullest of them: a dodging game with a score,
-three lives, and an ending that says GAME OVER and offers another go, in 504
+three lives, and an ending that says GAME OVER and offers another go, in 488
 bytes. It uses most of the language, including routines to start a fresh rock. Drop one into
 [the emulator](https://harianthk.github.io/chip8) under "Load a program" and it
 plays, with no mention of Nibble anywhere in the file. A test compiles the same
