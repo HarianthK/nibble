@@ -98,6 +98,14 @@ export function compile(source) {
   }
   const shareWait = tokens.filter((t) => t.text === "wait").length >= 2
   const waitCalls = []
+  // Print is drawn letter by letter inline, or from a table of glyph offsets
+  // by one shared routine. Whichever is smaller for this program wins.
+  const printed = tokens.filter((t, i) => t.text === "print" && tokens[i + 1]?.text.startsWith('"')).map((t, i) => tokens[tokens.indexOf(t) + 1].text.slice(1, -1))
+  const inlineCost = printed.reduce((n, str) => n + 4 + [...str].reduce((m, c) => m + (c === " " ? 2 : 6), 0), 0)
+  const tableCost = printed.reduce((n, str) => n + 16 + str.length + 1, 0) + 22 + (printed.some((str) => str.includes(" ")) ? 5 : 0)
+  const tablePrint = printed.length > 0 && tableCost < inlineCost
+  const printCalls = []
+  const strings = []
   const glyphs = new Map()
   const code = []
   const fixups = []
@@ -333,6 +341,28 @@ export function compile(source) {
         if (isName(tok)) emit(0x8000 | (which << 8) | (reg(tok, ln) << 4))
         else emit(0x6000 | (which << 8) | (number(tok, ln) & 0xff))
       }
+      if (tablePrint) {
+        // The routine walks the string in V1 and reads each byte into V0, so
+        // both are parked in memory around the call, the way show does it.
+        if (strings.length + text.length > 255) throw new Fault("too much text to print in one program", ln)
+        scratchRef(3)
+        emit(0xf155)
+        emit(0x6100 | strings.length)
+        for (const raw of text.slice(1, -1)) {
+          const ch = raw.toUpperCase()
+          if (!(ch in LETTERS) && ch !== " ") throw new Fault(`there is no letter for ${raw}`, ln)
+          if (!glyphs.has(ch)) glyphs.set(ch, ch === " " ? [0, 0, 0, 0, 0] : LETTERS[ch])
+          strings.push([...glyphs.keys()].indexOf(ch) * 5)
+        }
+        strings.push(0xff)
+        put(SCRATCH_A, xTok)
+        put(SCRATCH_B, yTok)
+        printCalls.push(emit(0x2000))
+        scratchRef(3)
+        emit(0xf165)
+        return
+      }
+
       put(SCRATCH_A, xTok)
       put(SCRATCH_B, yTok)
 
@@ -463,6 +493,23 @@ export function compile(source) {
       emit(0x00ee)
       for (const slot of waitCalls) code[slot] = 0x2000 | at
     }
+    if (printCalls.length) {
+      // Reads a glyph offset from the table at V1, returns on 0xFF, otherwise
+      // draws that glyph at (VD, VE) and steps both along.
+      const at = here()
+      fixups.push({ slot: emit(0xa000), table: true })
+      emit(0xf11e)
+      emit(0xf065)
+      emit(0x40ff)
+      emit(0x00ee)
+      fixups.push({ slot: emit(0xa000), glyphBase: true })
+      emit(0xf01e)
+      emit(0xd005 | (SCRATCH_A << 8) | (SCRATCH_B << 4))
+      emit(0x7000 | (SCRATCH_A << 8) | 5)
+      emit(0x7101)
+      emit(0x1000 | at)
+      for (const slot of printCalls) code[slot] = 0x2000 | at
+    }
 
     // Sprites live after the code, which is why their addresses are only known
     // once every instruction has been counted.
@@ -489,9 +536,12 @@ export function compile(source) {
       glyphAt.set(ch, PROGRAM_START + bytes.length)
       bytes.push(...rows)
     }
-    for (const { slot, name, scratch, glyph, line: ln } of fixups) {
-      const address = glyph !== undefined
-        ? glyphAt.get(glyph)
+    const glyphBase = glyphs.size ? glyphAt.values().next().value : PROGRAM_START + bytes.length
+    const tableAt = PROGRAM_START + bytes.length
+    bytes.push(...strings)
+    for (const { slot, name, scratch, glyph, table, glyphBase: base, line: ln } of fixups) {
+      const address = table ? tableAt : base ? glyphBase
+        : glyph !== undefined ? glyphAt.get(glyph)
         : scratch === undefined ? placed.get(name) : scratchAt + scratch
       if (address === undefined) throw new Fault(`no sprite called ${name}`, ln)
       const word = 0xa000 | address

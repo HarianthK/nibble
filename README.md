@@ -142,7 +142,7 @@ node nibble.mjs games/catch.nib
 
 The example programs are in `games/` as `.nib` source, with their compiled ROMs
 beside them. `meteors.nib` is the fullest of them: a dodging game with a score,
-three lives, and an ending that says GAME OVER and offers another go, in 484
+three lives, and an ending that says GAME OVER and offers another go, in 447
 bytes. It uses most of the language, including routines to start a fresh rock. Drop one into
 [the emulator](https://harianthk.github.io/chip8) under "Load a program" and it
 plays, with no mention of Nibble anywhere in the file. A test compiles the same

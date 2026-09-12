@@ -105,11 +105,25 @@ place. A call is one word and the copy is six, so it pays for itself at two
 uses and is left inline at one. The compiler counts the `wait` tokens before it
 starts, which is simpler than deciding at the end and moving code about.
 
+`print` was the biggest sink of all. Each letter was three words inline: point
+`I` at the glyph, draw it, step along. Six bytes a letter, and Meteors says
+twenty three letters. Now a program with enough text gets one drawing routine
+and a table of one byte per character, each byte the glyph's offset from the
+start of the glyph block, with `0xFF` to end a string. Spaces become a blank
+glyph rather than a special case, five bytes once instead of two words of
+routine. The routine walks the table in `V1` and reads each byte into `V0`,
+which belong to the program, so they are parked in the same six bytes of
+working memory that `show` uses and put back after. That parking is most of
+the sixteen byte cost per print, and the routine is twenty two once, so the
+compiler adds both up against the inline cost before it starts and takes the
+smaller. A program that prints one short word stays inline. Meteors drops
+thirty seven bytes.
+
 The proof is not the unit test but a recording. Before the change, every
 example and game was compiled, run for six hundred frames under three key
 scripts with the random generator seeded, and every frame's screen hashed.
 After the change the hashes had to match exactly, and they do, while the
-programs got 100 bytes smaller between them. Breaking either half of the flip
+programs got 174 bytes smaller between them. Breaking either half of the flip
 on purpose makes the recording disagree, which is what makes it worth trusting.
 
 One thing that recording taught: it has to give each frame more instructions

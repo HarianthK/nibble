@@ -335,6 +335,45 @@ halt`).bytes.length
   assert(litCount(cpu) === 9, `expected 9 marks after 20 frames of two waits each, found ${litCount(cpu)}`)
 })
 
+check("print from a table draws the same pixels as print inline", () => {
+  // A short program prints inline. Enough text tips it into the shared
+  // routine. The first line has to come out identical either way.
+  const short = run(`print "ABC XYZ" at 3, 2
+halt`)
+  const long = run(`print "ABC XYZ" at 3, 2
+print "SOME MORE WORDS HERE" at 0, 20
+print "AND MORE" at 0, 26
+halt`)
+  const words = (src) => { const b = compile(src).bytes, w = []; for (let i = 0; i < b.length; i += 2) w.push((b[i] << 8) | b[i + 1]); return w }
+  // Table mode parks V0 and V1 with F155 before each print. Glyph rows have a
+  // zero low nibble and string bytes are multiples of five, so data cannot fake it.
+  const parks = (src) => words(src).filter((w) => w === 0xf155).length
+  assert(parks(`print "ABC XYZ" at 3, 2
+halt`) === 0, "the short program should have printed inline")
+  assert(parks(`print "ABC XYZ" at 3, 2
+print "SOME MORE WORDS HERE" at 0, 20
+print "AND MORE" at 0, 26
+halt`) === 3, "the long program should use the routine three times")
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 64; x++) {
+    assert(on(short, x, y) === on(long, x, y), `pixel ${x},${y} differs between inline and table print`)
+  }
+  assert(litCount(short) > 20, "the short program drew nothing")
+})
+
+check("print from a table gives V0 and V1 back", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var a = 9
+    var b = 13
+    print "SOME MORE WORDS HERE" at 0, 20
+    print "AND MORE" at 0, 26
+    draw dot at a, 0
+    draw dot at b, 0
+    halt
+  `)
+  assert(on(cpu, 9, 0) && on(cpu, 13, 0), "a or b was not what it was before the print")
+})
+
 check("a routine can be defined once and called several times", () => {
   const cpu = run(`
     sprite dot [ 0x80 ]
