@@ -392,6 +392,39 @@ check("the compiled bytes read back as the program that was written", () => {
   assert(text.trim().endsWith("0x80"), "the sprite should be the last thing, as data")
 })
 
+check("a for loop runs the body once for each number, ends included", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var x = 0
+    for x = 2 to 9 { draw dot at x, 3 }
+    halt
+  `)
+  for (let x = 2; x <= 9; x++) assert(on(cpu, x, 3), `nothing drawn at column ${x}`)
+  assert(!on(cpu, 1, 3) && !on(cpu, 10, 3), "the loop ran outside its range")
+  assert(litCount(cpu) === 8, `expected 8 pixels, found ${litCount(cpu)}`)
+})
+
+check("a for loop can start from a variable, and leaves the counter past the end", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var a = 5
+    var n = 0
+    for n = a to 6 { draw dot at n, 0 }
+    draw dot at n, 5
+    halt
+  `)
+  assert(on(cpu, 5, 0) && on(cpu, 6, 0), "did not draw at 5 and 6")
+  assert(on(cpu, 7, 5), "the counter should be one past the end when the loop is done")
+  assert(litCount(cpu) === 3, `expected 3 pixels, found ${litCount(cpu)}`)
+})
+
+check("a for loop refuses a variable as its end, and says so with the line", () => {
+  const { error } = compile(`var a = 1
+var b = 4
+for a = 0 to b { }`)
+  assert(error && error.line === 3 && /number after to/.test(error.message), `got ${error && error.message}`)
+})
+
 check("a routine can be defined once and called several times", () => {
   const cpu = run(`
     sprite dot [ 0x80 ]

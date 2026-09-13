@@ -398,6 +398,30 @@ export function compile(source) {
       return
     }
 
+    if (word === "for") {
+      // for x = a to b { ... } runs the body with x at a, a+1 ... b. The end
+      // has to be a number, since the test is against one more than it.
+      next()
+      const target = reg(next(), ln)
+      eat("=")
+      const first = next()
+      if (isName(first)) emit(0x8000 | (target << 8) | (reg(first, ln) << 4))
+      else emit(0x6000 | (target << 8) | (number(first, ln) & 0xff))
+      eat("to")
+      const lastTok = next()
+      if (isName(lastTok)) throw new Fault("for needs a number after to, not a variable", ln)
+      const last = number(lastTok, ln)
+      if (last > 254) throw new Fault("for can count up to 254 at most", ln)
+      const top = here()
+      emit(0x4000 | (target << 8) | (last + 1))
+      const jumpOut = emit(0x1000)
+      block()
+      emit(0x7000 | (target << 8) | 1)
+      emit(0x1000 | top)
+      code[jumpOut] = 0x1000 | here()
+      return
+    }
+
     if (word === "if") {
       next()
       condition()

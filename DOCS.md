@@ -82,6 +82,15 @@ is known.
 **Errors carry a line number** and name what was expected. A compiler that says
 only "syntax error" is a compiler you argue with.
 
+## Why `for` ends on a number
+
+`for x = a to b` tests for the end by comparing the counter with `b + 1`, one
+instruction, because the machine can compare a register with a number in a
+single skip. Comparing with another register instead would need the end kept
+one higher in a scratch register or an extra subtraction every pass, and the
+program that needs a variable end can write it as a `while`. The counter is
+left at `b + 1` when the loop is done, which is what the test checks.
+
 ## Making the output smaller
 
 The machine has no conditional jump, only a conditional skip of one

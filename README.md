@@ -79,11 +79,14 @@ if hit { ... }
 lit, which is the only collision test the machine has. Check it straight after
 a `draw`.
 
-**Loops** run forever or until a condition fails.
+**Loops** run forever, until a condition fails, or once for each number in a
+range, ends included. The counter is one of your variables, the start can be a
+number or another variable, and the end has to be a number.
 
 ```
 loop { ... }
 while x != 10 { ... }
+for x = 2 to 9 { draw dot at x, 3 }
 ```
 
 **Routines** let you name a piece of code and use it more than once. Call one by
