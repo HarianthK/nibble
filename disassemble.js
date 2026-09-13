@@ -150,3 +150,55 @@ export function disassemble(rom) {
   flush()
   return lines.join("\n") + "\n"
 }
+
+// Follows the program the way the walker does, carrying what each register is
+// known to hold. A register whose value differs down two paths becomes unknown.
+export function keysWatched(rom) {
+  const { mem, code } = analyse(rom)
+  const start = 0x200
+  const state = new Map() // address -> 16 entries, a number or null
+  const asked = new Set()
+  let anyKey = false
+  const merge = (a, b) => a.map((v, i) => (v === b[i] ? v : null))
+  const same = (a, b) => a.every((v, i) => v === b[i])
+
+  const todo = [[start, Array(16).fill(null)]]
+  while (todo.length) {
+    const [pc, incoming] = todo.pop()
+    const d = code.get(pc)
+    if (!d) continue
+    const had = state.get(pc)
+    const now = had ? merge(had, incoming) : incoming
+    if (had && same(had, now)) continue
+    state.set(pc, now)
+
+    const v = [...now]
+    const op = (mem[pc] << 8) | mem[pc + 1]
+    const x = (op >> 8) & 0xf, y = (op >> 4) & 0xf, nn = op & 0xff
+    switch (op >> 12) {
+      case 0x6: v[x] = nn; break
+      case 0x7: v[x] = v[x] === null ? null : (v[x] + nn) & 0xff; break
+      case 0x8:
+        v[x] = (op & 0xf) === 0 ? v[y] : null
+        if ((op & 0xf) >= 4) v[0xf] = null
+        break
+      case 0xc: v[x] = null; break
+      case 0xd: v[0xf] = null; break
+      case 0xe: {
+        // The low nibble of the register names the key, and only these two
+        // opcodes ask about one.
+        if (nn === 0x9e || nn === 0xa1) v[x] === null ? (anyKey = true) : asked.add(v[x] & 0xf)
+        break
+      }
+      case 0xf:
+        if (nn === 0x0a) { v[x] = null; anyKey = true }
+        else if (nn === 0x07) v[x] = null
+        else if (nn === 0x65) for (let i = 0; i <= x; i++) v[i] = null
+        else if (nn === 0x1e) v[0xf] = null
+        break
+      case 0x5: if ((op & 0xf) === 3) for (let i = Math.min(x, y); i <= Math.max(x, y); i++) v[i] = null; break
+    }
+    for (const t of d.to) todo.push([t, v])
+  }
+  return { asked, anyKey }
+}
