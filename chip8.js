@@ -349,16 +349,19 @@ export class Chip8 {
   }
 
   // Scrolling moves the visible area only, so the rows and columns beyond the
-  // low resolution corner are left alone.
+  // low resolution corner are left alone. Only the selected planes move: a
+  // pixel holds a bit per plane, and the bits of unselected planes stay put.
   scrollDown(rows) {
     const w = this.width
     const h = this.height
+    const keep = ~this.plane & 3
     const ys = rows >= 0 ? [...Array(h).keys()].reverse() : [...Array(h).keys()]
     for (const y of ys) {
       const from = y - rows
       const inside = from >= 0 && from < h
       for (let x = 0; x < w; x++) {
-        this.display[y * WIDTH + x] = inside ? this.display[from * WIDTH + x] : 0
+        const moved = inside ? this.display[from * WIDTH + x] & this.plane : 0
+        this.display[y * WIDTH + x] = (this.display[y * WIDTH + x] & keep) | moved
       }
     }
     this.drawn = true
@@ -366,17 +369,15 @@ export class Chip8 {
 
   scrollSide(by) {
     const w = this.width
+    const keep = ~this.plane & 3
     for (let y = 0; y < this.height; y++) {
       const row = y * WIDTH
-      if (by > 0) {
-        for (let x = w - 1; x >= 0; x--) {
-          this.display[row + x] = x - by >= 0 ? this.display[row + x - by] : 0
-        }
-      } else {
-        for (let x = 0; x < w; x++) {
-          this.display[row + x] = x - by < w ? this.display[row + x - by] : 0
-        }
+      const move = (x, from) => {
+        const moved = from >= 0 && from < w ? this.display[row + from] & this.plane : 0
+        this.display[row + x] = (this.display[row + x] & keep) | moved
       }
+      if (by > 0) for (let x = w - 1; x >= 0; x--) move(x, x - by)
+      else for (let x = 0; x < w; x++) move(x, x - by)
     }
     this.drawn = true
   }
