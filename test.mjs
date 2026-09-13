@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, rmSync } from "node:fs"
 import { compile } from "./compile.js"
 import { EXAMPLES } from "./examples.js"
 import { Chip8, WIDTH } from "./chip8.js"
+import { disassemble } from "./disassemble.js"
 
 let passed = 0
 let failed = 0
@@ -372,6 +373,23 @@ check("print from a table gives V0 and V1 back", () => {
     halt
   `)
   assert(on(cpu, 9, 0) && on(cpu, 13, 0), "a or b was not what it was before the print")
+})
+
+check("the compiled bytes read back as the program that was written", () => {
+  const { bytes } = compile(`
+    sprite dot [ 0x80 ]
+    var x = 3
+    loop {
+      if key(A) { x += 1 }
+      draw dot at x, 4
+      wait
+    }
+  `)
+  const text = disassemble(bytes)
+  for (const want of ["v0 := 0x03", "if vd key then", "v0 += 0x01", "sprite vd ve 1", "delay := vd", "jump 0x"]) {
+    assert(text.includes(want), `expected the listing to contain "${want}"`)
+  }
+  assert(text.trim().endsWith("0x80"), "the sprite should be the last thing, as data")
 })
 
 check("a routine can be defined once and called several times", () => {

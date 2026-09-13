@@ -66,6 +66,14 @@
     color: var(--muted); word-break: break-all; white-space: pre-wrap;
   }
   #bytes b { color: var(--accent); font-weight: 500; }
+  /* The same bytes read back as Octo source, so the compiler's choices show. */
+  #listing { font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
+  #listing summary { cursor: pointer; }
+  #listing pre {
+    margin: 6px 0 0; max-height: 16rem; overflow: auto; font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    color: var(--ink); background: rgb(255 255 255 / 0.04); border: 1px solid var(--edge); border-radius: 8px; padding: 8px 10px;
+  }
+  #listing[hidden] { display: none; }
 
   table { border-collapse: collapse; font-size: 0.7rem; color: var(--muted); margin: 0 auto; }
   td {
@@ -107,6 +115,7 @@
       <p id="status">Pick an example and press compile.</p>
       <h2 style="margin-top: 12px">What it compiled to</h2>
       <p id="bytes"></p>
+      <details id="listing" hidden><summary>Read it as Octo source</summary><pre></pre></details>
       <h2 style="margin-top: 12px">Keys</h2>
       <table id="pad">
         <tr><td data-code="Digit1"><b>1</b></td><td data-code="Digit2"><b>2</b></td><td data-code="Digit3"><b>3</b></td><td data-code="Digit4"><b>4</b></td></tr>

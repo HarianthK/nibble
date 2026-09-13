@@ -1,6 +1,7 @@
 import { compile } from "./compile.js"
 import { EXAMPLES } from "./examples.js"
 import { Chip8, WIDTH } from "./chip8.js"
+import { disassemble } from "./disassemble.js"
 
 const KEYMAP = {
   Digit1: 0x1, Digit2: 0x2, Digit3: 0x3, Digit4: 0xc,
@@ -15,6 +16,7 @@ const ctx = canvas.getContext("2d")
 const source = document.getElementById("source")
 const statusEl = document.getElementById("status")
 const bytesEl = document.getElementById("bytes")
+const listingEl = document.getElementById("listing")
 const examples = document.getElementById("examples")
 const pad = document.getElementById("pad")
 
@@ -105,6 +107,10 @@ function showBytes(bytes) {
     hex.push(`${a}${b}`)
   }
   bytesEl.innerHTML = `<b>${bytes.length} bytes</b>  ` + hex.join(" ")
+  // Read back from the bytes, not from the compiler, so it shows what the
+  // machine will actually see.
+  listingEl.hidden = false
+  listingEl.querySelector("pre").textContent = disassemble(bytes)
 }
 
 function showUsedKeys() {
@@ -120,6 +126,7 @@ function go() {
     statusEl.className = "bad"
     statusEl.textContent = `Line ${error.line}: ${error.message}`
     bytesEl.textContent = ""
+    listingEl.hidden = true
     return
   }
   statusEl.className = ""

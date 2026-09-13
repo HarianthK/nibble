@@ -172,9 +172,12 @@ time. It only says the deploy worked once the site proves it.
 
 ## Built with
 
-Nothing. It is five files of JavaScript, served as they are. The emulator is
-copied in from my [CHIP-8 project](https://github.com/HarianthK/chip8), which
-runs every program in the community archive.
+Nothing. It is six files of JavaScript, served as they are. The emulator and
+the disassembler are copied in from my
+[CHIP-8 project](https://github.com/HarianthK/chip8), which runs every program
+in the community archive. The disassembler is what draws "Read it as Octo
+source" under the bytes: the output read back as text, so the compiler's
+choices can be seen rather than guessed at.
 
 ## Notes
 

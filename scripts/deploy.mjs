@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
 const SITE = "https://nibble-lang.vercel.app"
-const FILES = ["index.html", "app.js", "compile.js", "examples.js", "chip8.js"]
+const FILES = ["index.html", "app.js", "compile.js", "examples.js", "chip8.js", "disassemble.js"]
 
 const digest = (text) => createHash("sha256").update(text.replace(/\r\n/g, "\n")).digest("hex").slice(0, 12)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
