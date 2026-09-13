@@ -6,8 +6,9 @@ const hex = (n, w = 2) => "0x" + n.toString(16).toUpperCase().padStart(w, "0")
 const reg = (n) => "v" + n.toString(16)
 
 // One entry per opcode family: the Octo text for it, and where the machine
-// goes next. A missing entry means the word is not an instruction.
-function decode(mem, pc) {
+// goes next. A missing entry means the word is not an instruction. `name`
+// turns an address into a label where one exists, or hex where it does not.
+function decode(mem, pc, name = (a, w) => hex(a, w)) {
   const op = (mem[pc] << 8) | mem[pc + 1]
   const nnn = op & 0xfff, nn = op & 0xff, n = op & 0xf
   const x = (op >> 8) & 0xf, y = (op >> 4) & 0xf
@@ -33,8 +34,8 @@ function decode(mem, pc) {
       // it, and programs that patch their own code rely on that. Two in a
       // row is a table of small numbers, not code.
       return { text: null, size: 2, to: (mem[next] >> 4) === 0 ? [] : [next] }
-    case 0x1: return { text: `jump ${hex(nnn, 3)}`, size: 2, to: nnn === pc ? [] : [nnn], label: nnn, ends: true }
-    case 0x2: return { text: `:call ${hex(nnn, 3)}`, size: 2, to: [nnn, next], label: nnn }
+    case 0x1: return { text: `jump ${name(nnn, 3)}`, size: 2, to: nnn === pc ? [] : [nnn], label: nnn, ends: true }
+    case 0x2: return { text: `:call ${name(nnn, 3)}`, size: 2, to: [nnn, next], label: nnn, call: nnn }
     case 0x3: return skip(`if ${reg(x)} != ${hex(nn)} then`)
     case 0x4: return skip(`if ${reg(x)} == ${hex(nn)} then`)
     case 0x5:
@@ -49,13 +50,13 @@ function decode(mem, pc) {
       return n in ops ? plain(`${reg(x)} ${ops[n]} ${reg(y)}`) : null
     }
     case 0x9: return n === 0 ? skip(`if ${reg(x)} == ${reg(y)} then`) : null
-    case 0xa: return { ...plain(`i := ${hex(nnn, 3)}`), data: nnn }
+    case 0xa: return { ...plain(`i := ${name(nnn, 3)}`), data: nnn }
     // Where jump0 lands depends on v0. The usual shape is a table of jumps,
     // so those are followed for as long as the words there are jumps.
     case 0xb: {
       const to = [nnn]
       for (let a = nnn + 2; a + 1 < mem.length && (mem[a] >> 4) === 1; a += 2) to.push(a)
-      return { text: `jump0 ${hex(nnn, 3)}`, size: 2, to, blind: true, label: nnn }
+      return { text: `jump0 ${name(nnn, 3)}`, size: 2, to, blind: true, label: nnn }
     }
     case 0xc: return plain(`${reg(x)} := random ${hex(nn)}`)
     case 0xd: return plain(`sprite ${reg(x)} ${reg(y)} ${n}`)
@@ -66,7 +67,7 @@ function decode(mem, pc) {
     case 0xf:
       if (op === 0xf000) {
         const addr = (mem[pc + 2] << 8) | mem[pc + 3]
-        return { text: `i := long ${hex(addr, 4)}`, size: 4, to: [pc + 4], data: addr }
+        return { text: `i := long ${name(addr, 4)}`, size: 4, to: [pc + 4], data: addr }
       }
       if (nn === 0x01) return plain(`plane ${x}`)
       if (op === 0xf002) return plain("audio")
@@ -96,6 +97,8 @@ export function analyse(rom) {
   const code = new Map() // address -> decoded instruction
   const labels = new Set([START])
   const dataLabels = new Set()
+  const subs = new Set()
+  const sprites = new Set()
   let blind = false
   // A jump0 table is often a row of same-sized blocks each ending in a
   // return or a jump, so on those paths the word after an ending is tried
@@ -110,7 +113,19 @@ export function analyse(rom) {
     if (!d) continue
     code.set(pc, d)
     if (d.label !== undefined) labels.add(d.label)
-    if (d.data !== undefined) dataLabels.add(d.data)
+    if (d.call !== undefined) subs.add(d.call)
+    if (d.data !== undefined) {
+      dataLabels.add(d.data)
+      // Data that a draw reaches for within a few instructions is a sprite.
+      let at = pc + d.size
+      for (let k = 0; k < 8; k++) {
+        const w = (mem[at] << 8) | mem[at + 1]
+        if ((w & 0xf000) === 0xd000) { sprites.add(d.data); break }
+        const n = decode(mem, at)
+        if (!n || n.data !== undefined || n.ends || (w & 0xf0ff) === 0xf01e || (w & 0xf0ff) === 0xf029 || (w & 0xf0ff) === 0xf030) break
+        at += n.size
+      }
+    }
     if (d.blind) { blind = true; for (const t of d.to) table.add(t) }
     if (table.has(pc)) {
       for (const t of d.to) table.add(t)
@@ -118,11 +133,34 @@ export function analyse(rom) {
     }
     todo.push(...d.to)
   }
-  return { mem, end, code, labels, dataLabels, blind }
+  return { mem, end, code, labels, dataLabels, subs, sprites, blind }
+}
+
+// Every address that gets a label line, and what it is called.
+function labelName(pc, { labels, dataLabels, subs, sprites }) {
+  const at = pc.toString(16).toUpperCase()
+  if (pc === START) return "main"
+  if (subs.has(pc)) return `sub_${at}`
+  if (labels.has(pc)) return `L_${at}`
+  if (sprites.has(pc)) return `sprite_${at}`
+  if (dataLabels.has(pc)) return `data_${at}`
+  return null
 }
 
 export function disassemble(rom) {
-  const { mem, end, code, labels, dataLabels, blind } = analyse(rom)
+  const found = analyse(rom)
+  const { mem, end, code, labels, dataLabels, blind } = found
+  // The listing steps through the program instruction by instruction, or a
+  // byte at a time through data, so an address inside an instruction never
+  // gets a line of its own. Only addresses the walk lands on can be named.
+  const overlapping = (pc, d) => [...Array(d.size - 1).keys()].some((k) => code.has(pc + 1 + k))
+  const landed = new Set()
+  for (let pc = START; pc < end;) {
+    landed.add(pc)
+    const d = code.get(pc)
+    pc += d && d.text && !overlapping(pc, d) && pc + d.size <= end ? d.size : 1
+  }
+  const name = (a, w) => (landed.has(a) && labelName(a, found)) || hex(a, w)
   const lines = []
   if (blind) lines.push("# This program uses jump0, so some code may be listed as bytes.")
   let pc = START
@@ -131,15 +169,14 @@ export function disassemble(rom) {
   while (pc < end) {
     if (labels.has(pc) || dataLabels.has(pc)) {
       flush()
-      lines.push(`: ${pc === START ? "main" : (labels.has(pc) ? "L_" : "D_") + pc.toString(16).toUpperCase()}`)
+      lines.push(`: ${labelName(pc, found)}`)
     }
     const d = code.get(pc)
     // Two instructions can overlap when a jump lands inside one. The bytes
     // are kept as they are and the machine sorts it out.
-    const overlaps = d && [...Array(d.size - 1).keys()].some((k) => code.has(pc + 1 + k))
-    if (d && d.text && !overlaps && pc + d.size <= end) {
+    if (d && d.text && !overlapping(pc, d) && pc + d.size <= end) {
       flush()
-      lines.push("  " + d.text)
+      lines.push("  " + decode(mem, pc, name).text)
       pc += d.size
     } else {
       run.push(mem[pc])

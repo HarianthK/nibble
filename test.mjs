@@ -386,7 +386,7 @@ check("the compiled bytes read back as the program that was written", () => {
     }
   `)
   const text = disassemble(bytes)
-  for (const want of ["v0 := 0x03", "if vd key then", "v0 += 0x01", "sprite vd ve 1", "delay := vd", "jump 0x"]) {
+  for (const want of ["v0 := 0x03", "if vd key then", "v0 += 0x01", "sprite vd ve 1", "delay := vd", "jump L_"]) {
     assert(text.includes(want), `expected the listing to contain "${want}"`)
   }
   assert(text.trim().endsWith("0x80"), "the sprite should be the last thing, as data")
