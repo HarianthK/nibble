@@ -425,6 +425,24 @@ for a = 0 to b { }`)
   assert(error && error.line === 3 && /number after to/.test(error.message), `got ${error && error.message}`)
 })
 
+check("else if chains pick exactly one branch", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var n = 2
+    if n == 1 { draw dot at 1, 0 }
+    else if n == 2 { draw dot at 2, 0 }
+    else if n == 3 { draw dot at 3, 0 }
+    else { draw dot at 4, 0 }
+    n = 9
+    if n == 1 { draw dot at 1, 5 }
+    else if n == 2 { draw dot at 2, 5 }
+    else { draw dot at 4, 5 }
+    halt
+  `)
+  assert(on(cpu, 2, 0) && on(cpu, 4, 5), "the wrong branch ran")
+  assert(litCount(cpu) === 2, `expected 2 pixels, found ${litCount(cpu)}`)
+})
+
 check("a routine can be defined once and called several times", () => {
   const cpu = run(`
     sprite dot [ 0x80 ]

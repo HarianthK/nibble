@@ -432,7 +432,9 @@ export function compile(source) {
         next()
         const jumpPastElse = emit(0x1000)
         code[jumpOver] = 0x1000 | here()
-        block()
+        // else if is another if in the else branch, without the braces.
+        if (peek() === "if") statement()
+        else block()
         code[jumpPastElse] = 0x1000 | here()
       } else if (code.length === jumpOver + 2 && (code[jumpOver + 1] & 0xf000) !== 0x1000) {
         // A one-word body needs no jump: flip the skip and put the body

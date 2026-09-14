@@ -67,6 +67,7 @@ touched.
 
 ```
 if x == 5 { ... } else { ... }
+if x == 5 { ... } else if x == 6 { ... } else { ... }
 if x != y { ... }
 if x < 10 { ... }
 if x > y { ... }
