@@ -154,6 +154,25 @@ loop {
   wait
 }`,
 
+  "Stars": `# Forty stars at random, then a fresh sky whenever you press X.
+# A for loop runs its body once for each number, ends included.
+sprite star [ 0x80 ]
+
+var x = 0
+var y = 0
+var i = 0
+
+loop {
+  clear
+  for i = 1 to 40 {
+    rand x, 0x3F
+    rand y, 0x1F
+    draw star at x, y
+  }
+  while !key(X) { wait }
+  while key(X) { wait }
+}`,
+
   "Draw with the keys": `# W A S D draws a trail, X wipes it.
 # It only draws where it moves, because drawing the same
 # spot twice would rub the pixel out again.
