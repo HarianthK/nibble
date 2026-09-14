@@ -1,7 +1,7 @@
 import { compile } from "./compile.js"
 import { EXAMPLES } from "./examples.js"
 import { Chip8, WIDTH } from "./chip8.js"
-import { disassemble } from "./disassemble.js"
+import { disassemble, keysWatched } from "./disassemble.js"
 
 const KEYMAP = {
   Digit1: 0x1, Digit2: 0x2, Digit3: 0x3, Digit4: 0xc,
@@ -144,6 +144,8 @@ function go() {
     probe.keyUp(k)
   }
   cpu.used.set(probe.used)
+  // Reading the program finds keys on paths the short run never reached.
+  try { for (const k of keysWatched(bytes).asked) cpu.used[k] = 1 } catch {}
   showUsedKeys()
 
   if (!running) {
@@ -167,6 +169,7 @@ for (const name of Object.keys(EXAMPLES)) {
 }
 examples.addEventListener("change", () => {
   source.value = EXAMPLES[examples.value]
+  history.replaceState(null, "", `?example=${encodeURIComponent(examples.value)}`)
   go()
 })
 
@@ -194,7 +197,10 @@ for (const cell of pad.querySelectorAll("td[data-code]")) {
   cell.addEventListener("pointercancel", onPointer(false))
 }
 
-source.value = EXAMPLES[Object.keys(EXAMPLES)[0]]
-examples.value = Object.keys(EXAMPLES)[0]
+// A link can name an example, so one can be shared as an address.
+const wanted = new URLSearchParams(location.search).get("example")
+const first = wanted && EXAMPLES[wanted] ? wanted : Object.keys(EXAMPLES)[0]
+source.value = EXAMPLES[first]
+examples.value = first
 paint()
 go()
