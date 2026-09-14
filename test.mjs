@@ -443,6 +443,140 @@ check("else if chains pick exactly one branch", () => {
   assert(litCount(cpu) === 2, `expected 2 pixels, found ${litCount(cpu)}`)
 })
 
+check("a constant is a number wherever a number can go", () => {
+  const { bytes } = compile(`
+    const RIGHT = 61
+    sprite d [ 0x80 ]
+    var x = RIGHT
+    if x > RIGHT { x = RIGHT }
+    for x = 0 to RIGHT { draw d at x, RIGHT }
+    halt
+  `)
+  const plain = compile(`
+    sprite d [ 0x80 ]
+    var x = 61
+    if x > 61 { x = 61 }
+    for x = 0 to 61 { draw d at x, 61 }
+    halt
+  `).bytes
+  assert(bytes.length === plain.length && bytes.every((b, i) => b === plain[i]), "a constant should compile to exactly the number it names")
+})
+
+check("a constant cannot be used as a variable, or clash with one", () => {
+  const a = compile(`const N = 3
+var x = 0
+x = N
+N += 1`).error
+  assert(a && a.line === 4 && /constant/.test(a.message), `got ${a && a.message}`)
+  const b = compile(`var y = 1
+const y = 2`).error
+  assert(b && b.line === 2, `got ${b && b.message}`)
+})
+
+check("a number that does not fit a byte is refused rather than wrapped", () => {
+  const cases = [`var x = 300`, `var x = 1` + String.fromCharCode(10) + `x += 256`, `var x = 1` + String.fromCharCode(10) + `x = x + 999`, `sprite s [ 0x100 ]`]
+  for (const src of cases) {
+    const { error } = compile(src)
+    assert(error && /0 to 255/.test(error.message), `${JSON.stringify(src)} should have been refused, got ${error && error.message}`)
+  }
+})
+
+check("assigning a variable to itself with a change costs one instruction", () => {
+  const { bytes } = compile(`
+    var x = 5
+    x = x - 1
+    halt
+  `)
+  // 6005 70FF 1204: the load, the add of 255, the halt.
+  assert(bytes.length === 6, `expected 6 bytes, got ${bytes.length}`)
+  const cpu = run(`
+    sprite d [ 0x80 ]
+    var x = 5
+    x = x - 1
+    draw d at x, 0
+    halt
+  `)
+  assert(on(cpu, 4, 0), "x should be 4")
+})
+
+check("an array cell can be read into any variable and written from any", () => {
+  // Variables are registers in order, so a is v0, b is v1, i is v2.
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    array cells [ 3 5 7 ]
+    var a = 0
+    var b = 0
+    var i = 2
+    a = cells[1]
+    b = cells[i]
+    draw dot at a, 0
+    draw dot at b, 1
+    cells[0] = 9
+    cells[i] = a
+    b = cells[0]
+    draw dot at b, 2
+    a = cells[2]
+    draw dot at a, 3
+    halt
+  `)
+  assert(on(cpu, 5, 0), "cells[1] should be 5")
+  assert(on(cpu, 7, 1), "cells[i] with i 2 should be 7")
+  assert(on(cpu, 9, 2), "cells[0] should have become 9")
+  assert(on(cpu, 5, 3), "cells[2] should have become what a held")
+  assert(litCount(cpu) === 4, `expected 4 pixels, found ${litCount(cpu)}`)
+})
+
+check("array reads and writes give v0 back, even when v0 is the index", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    array cells [ 4 of 0 ]
+    var a = 3
+    var b = 0
+    cells[a] = 6
+    b = cells[a]
+    draw dot at a, 0
+    draw dot at b, 1
+    cells[a] = a
+    a = cells[3]
+    draw dot at a, 2
+    halt
+  `)
+  assert(on(cpu, 3, 0), "a, which is v0, was not given back after being used as the index")
+  assert(on(cpu, 6, 1), "b should have read 6")
+  assert(on(cpu, 3, 2), "cells[a] = a then a = cells[3] should leave a at 3")
+  assert(litCount(cpu) === 3, `expected 3 pixels, found ${litCount(cpu)}`)
+})
+
+check("n of v fills an array, and going past the end is refused at compile time", () => {
+  const { bytes } = compile(`array big [ 64 of 0 ]
+halt`)
+  assert(bytes.length === 2 + 64, `expected 66 bytes, got ${bytes.length}`)
+  const { error } = compile(`array a [ 4 of 0 ]
+var x = 0
+a[4] = 1`)
+  assert(error && /past the end/.test(error.message), `got ${error && error.message}`)
+})
+
+check("and joins conditions, and the body only runs when all of them hold", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var a = 1
+    var b = 2
+    var n = 0
+    if a == 1 and b == 2 { draw dot at 1, 0 }
+    if a == 1 and b == 3 { draw dot at 2, 0 }
+    if a == 9 and b == 2 { draw dot at 3, 0 }
+    if a == 1 and b == 2 and n == 0 { draw dot at 4, 0 }
+    if a == 1 and b == 2 { draw dot at 5, 0 } else { draw dot at 6, 0 }
+    if a == 1 and b == 9 { draw dot at 7, 0 } else { draw dot at 8, 0 }
+    while n != 3 and a == 1 { draw dot at n, 5  n += 1 }
+    halt
+  `)
+  for (const x of [1, 4, 5, 8]) assert(on(cpu, x, 0), `expected a pixel at ${x}`)
+  for (const x of [2, 3, 6, 7]) assert(!on(cpu, x, 0), `did not expect a pixel at ${x}`)
+  assert(on(cpu, 0, 5) && on(cpu, 1, 5) && on(cpu, 2, 5) && !on(cpu, 3, 5), "the while with and ran the wrong number of times")
+})
+
 check("a routine can be defined once and called several times", () => {
   const cpu = run(`
     sprite dot [ 0x80 ]
@@ -596,30 +730,36 @@ check("the examples behave the same on any interpreter", () => {
 })
 
 check("display wait slows a program down without changing it", () => {
-  // Meteors draws three sprites a loop, so a machine that draws once per
-  // sixtieth of a second takes three times as long to reach the same place.
+  // A machine that draws once per sixtieth of a second takes longer to get
+  // through each loop of Meteors, but each loop must do the same thing. Loops
+  // are counted by the clear at the top of each one, so the two runs are
+  // compared after the same number of loops rather than the same time.
   const real = Math.random
-  const picture = (quirks, frames) => {
+  const picture = (quirks, loops) => {
     let seed = 12345
     Math.random = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
     const cpu = new Chip8()
     Object.assign(cpu.quirks, quirks)
     cpu.load(compile(EXAMPLES.Meteors).bytes)
-    for (let f = 0; f < frames; f++) {
-      for (let i = 0; i < 60 && !cpu.halted; i++) cpu.step()
+    let cleared = 0, frames = 0
+    while (cleared < loops && frames < 5000) {
+      for (let i = 0; i < 60 && !cpu.halted; i++) {
+        if (((cpu.memory[cpu.pc] << 8) | cpu.memory[cpu.pc + 1]) === 0x00e0 && ++cleared >= loops) break
+        cpu.step()
+      }
       cpu.tickTimers()
+      frames++
     }
-    return { picture: cpu.display.join(""), score: cpu.v[5], lives: cpu.v[6] }
+    return { picture: cpu.display.join(""), score: cpu.v[5], lives: cpu.v[6], frames }
   }
   try {
-    const quick = picture({}, 120)
-    const slow = picture({ vBlank: true }, 360)
-    assert(slow.picture === quick.picture, "three times as long did not reach the same picture")
+    const quick = picture({}, 80)
+    const slow = picture({ vBlank: true }, 80)
+    assert(slow.picture === quick.picture, "the same number of loops did not reach the same picture")
     assert(slow.score === quick.score, `score differs: ${slow.score} against ${quick.score}`)
     assert(slow.lives === quick.lives, `lives differ: ${slow.lives} against ${quick.lives}`)
     // And it really is slower, rather than the setting doing nothing at all.
-    const sameTime = picture({ vBlank: true }, 120)
-    assert(sameTime.picture !== quick.picture, "display wait made no difference, so this test proves nothing")
+    assert(slow.frames > quick.frames * 1.5, `display wait made too little difference (${slow.frames} against ${quick.frames} frames), so this test proves little`)
   } finally {
     Math.random = real
   }
@@ -649,6 +789,23 @@ check("the command line tool writes a ROM that matches the compiler", () => {
   } finally {
     rmSync("__tmp.nib", { force: true })
     rmSync("__tmp.ch8", { force: true })
+  }
+})
+
+check("the command line tool can write the program as Octo source too", () => {
+  writeFileSync("__tmp.nib", `
+    sprite dot [ 0x80 ]
+    var x = 9
+    draw dot at x, 3
+    halt
+  `)
+  try {
+    execFileSync("node", ["nibble.mjs", "__tmp.nib", "-o", "__tmp.ch8", "--octo"], { stdio: "pipe" })
+    const text = readFileSync("__tmp.8o", "utf8")
+    assert(text.startsWith(": main"), "Octo source should begin at main")
+    assert(/sprite v[0-9a-f] v[0-9a-f] 1/.test(text) && text.trim().endsWith("0x80"), "the draw and the sprite bytes should both be there")
+  } finally {
+    for (const f of ["__tmp.nib", "__tmp.ch8", "__tmp.8o"]) rmSync(f, { force: true })
   }
 })
 

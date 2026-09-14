@@ -81,10 +81,13 @@ export function compile(source) {
     if (peek() !== what) throw new Fault(`expected ${what}, found ${peek()}`, line())
     return next()
   }
-  const isName = (t) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(t)
+  // A named number is a number wherever it appears, so it is not a name.
+  const consts = new Map()
+  const isName = (t) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(t) && !consts.has(t)
 
   const vars = new Map()
   const sprites = new Map()
+  const arrays = new Map()
   const routines = new Map()
   const calls = []
   // One tick of the delay timer, which the machine counts down at 60Hz.
@@ -98,6 +101,26 @@ export function compile(source) {
   }
   const shareWait = tokens.filter((t) => t.text === "wait").length >= 2
   const waitCalls = []
+  // Showing a number is the same work every time, so two or more shows
+  // share one copy of it, the way wait does.
+  const shareShow = tokens.filter((t) => t.text === "show").length >= 2
+  const showCalls = []
+  // Draws the three digits parked in v0 to v2 at (vD, vE), leaving out the
+  // zeros in front: 7 rather than 007, 42 rather than 042.
+  const emitDigits = () => {
+    const draw = (digit) => { emit(0xf029 | (digit << 8)); emit(0xd005 | (SCRATCH_A << 8) | (SCRATCH_B << 4)); emit(0x7000 | (SCRATCH_A << 8) | 5) }
+    emit(0x4000)                       // hundreds: only if v0 is not zero
+    const skipH = emit(0x1000)
+    draw(0)
+    code[skipH] = 0x1000 | here()
+    emit(0x8011)                       // tens: only if v0 or v1 is not zero
+    emit(0x4000)
+    const skipT = emit(0x1000)
+    draw(1)
+    code[skipT] = 0x1000 | here()
+    emit(0xf229)                       // units, always
+    emit(0xd005 | (SCRATCH_A << 8) | (SCRATCH_B << 4))
+  }
   // Print is drawn letter by letter inline, or from a table of glyph offsets
   // by one shared routine. Whichever is smaller for this program wins.
   const printed = tokens.filter((t, i) => t.text === "print" && tokens[i + 1]?.text.startsWith('"')).map((t, i) => tokens[tokens.indexOf(t) + 1].text.slice(1, -1))
@@ -121,10 +144,28 @@ export function compile(source) {
     return w ^ 0x003f // EX9E and EXA1
   }
   const here = () => PROGRAM_START + code.length * 2
-  const spriteRef = (name, ln) => {
+  const spriteRef = (name, ln, plus = 0) => {
     const slot = emit(0xa000)
-    fixups.push({ slot, name, line: ln })
+    fixups.push({ slot, name, plus, line: ln })
   }
+
+  // Points i at one cell of an array: a fixed cell by address, a variable one
+  // by adding the register. Both leave i ready for a load or save of v0.
+  const cellRef = (name, ln) => {
+    eat("[")
+    const idx = next()
+    eat("]")
+    if (isName(idx)) { spriteRef(name, ln); emit(0xf01e | (reg(idx, ln) << 8)) }
+    else {
+      const k = number(idx, ln)
+      if (k >= arrays.get(name).length) throw new Fault(`${name} has ${arrays.get(name).length} cells, so ${k} is past the end`, ln)
+      spriteRef(name, ln, k)
+    }
+  }
+  // Reads and writes go through v0, which belongs to the program, so it is
+  // parked in the working memory show already uses and put back afterwards.
+  const parkV0 = () => { scratchRef(3); emit(0xf055) }
+  const unparkV0 = () => { scratchRef(3); emit(0xf065) }
 
   // Each letter is a five row sprite, laid down after the code like any other.
   const glyphRef = (ch) => {
@@ -142,13 +183,18 @@ export function compile(source) {
   }
 
   const reg = (name, ln) => {
+    if (consts.has(name)) throw new Fault(`${name} is a constant, and only a variable can go there`, ln)
     if (!vars.has(name)) throw new Fault(`no variable called ${name}`, ln)
     return vars.get(name)
   }
 
   const number = (t, ln) => {
+    if (consts.has(t)) return consts.get(t)
     const n = t.startsWith("0x") ? parseInt(t, 16) : parseInt(t, 10)
     if (Number.isNaN(n)) throw new Fault(`${t} is not a number`, ln)
+    // Everything here is a byte, and a number that wraps would be a silent
+    // mistake rather than the one asked for.
+    if (n < 0 || n > 255) throw new Fault(`${t} is outside 0 to 255, which is all a byte can hold`, ln)
     return n
   }
 
@@ -228,15 +274,47 @@ export function compile(source) {
     const ln = line()
     const word = peek()
 
+    if (word === "const") {
+      next()
+      const name = next()
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Fault(`${name} is not a name a constant can have`, ln)
+      if (vars.has(name) || routines.has(name) || sprites.has(name)) throw new Fault(`${name} is already used for something else`, ln)
+      eat("=")
+      consts.set(name, number(next(), ln))
+      return
+    }
+
     if (word === "var") {
       next()
       const name = next()
+      if (consts.has(name)) throw new Fault(`${name} is already a constant`, ln)
       if (vars.has(name)) throw new Fault(`${name} is already a variable`, ln)
       if (vars.size >= MAX_VARS) throw new Fault(`too many variables, ${MAX_VARS} is the limit`, ln)
       const r = vars.size
       vars.set(name, r)
       eat("=")
       emit(0x6000 | (r << 8) | (number(next(), ln) & 0xff))
+      return
+    }
+
+    if (word === "array") {
+      next()
+      const name = next()
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Fault(`${name} is not a name an array can have`, ln)
+      if (arrays.has(name) || sprites.has(name) || vars.has(name) || consts.has(name) || routines.has(name)) throw new Fault(`${name} is already used for something else`, ln)
+      eat("[")
+      const cells = []
+      while (peek() !== "]") {
+        if (peek() === "\n") { next(); continue }
+        const v = number(next(), ln)
+        // [ 64 of 0 ] is sixty four cells all holding zero.
+        if (peek() === "of") { next(); const fill = number(next(), ln); for (let i = 0; i < v; i++) cells.push(fill); continue }
+        cells.push(v)
+      }
+      eat("]")
+      if (!cells.length) throw new Fault(`array ${name} has no cells`, ln)
+      if (cells.length > 255) throw new Fault(`an array can have at most 255 cells`, ln)
+      arrays.set(name, cells)
       return
     }
 
@@ -303,26 +381,20 @@ export function compile(source) {
       eat(",")
       const yTok = next()
 
-      // Reading the digits back lands them in V0 to V2, which belong to the
-      // program, so those are parked in memory first and put back after.
+      // The digits go to memory first, since reading them back lands them in
+      // V0 to V2, which belong to the program and are parked meanwhile.
       scratchRef(0)
       emit(0xf033 | (value << 8))
-      scratchRef(3)
-      emit(0xf255)
-      scratchRef(0)
-      emit(0xf265)
-
       if (isName(xTok)) emit(0x8000 | (SCRATCH_A << 8) | (reg(xTok, ln) << 4))
       else emit(0x6000 | (SCRATCH_A << 8) | (number(xTok, ln) & 0xff))
       if (isName(yTok)) emit(0x8000 | (SCRATCH_B << 8) | (reg(yTok, ln) << 4))
       else emit(0x6000 | (SCRATCH_B << 8) | (number(yTok, ln) & 0xff))
-
-      for (const digit of [0, 1, 2]) {
-        emit(0xf029 | (digit << 8))
-        emit(0xd005 | (SCRATCH_A << 8) | (SCRATCH_B << 4))
-        if (digit < 2) emit(0x7000 | (SCRATCH_A << 8) | 5)
-      }
-
+      if (shareShow) { showCalls.push(emit(0x2000)); return }
+      scratchRef(3)
+      emit(0xf255)
+      scratchRef(0)
+      emit(0xf265)
+      emitDigits()
       scratchRef(3)
       emit(0xf265)
       return
@@ -387,14 +459,25 @@ export function compile(source) {
       return
     }
 
+    // a and b and c: every part gets its own skip and jump out, so the first
+    // part that fails leaves. Returns the jumps to patch once the end is known.
+    const conditions = () => {
+      const outs = []
+      do {
+        if (outs.length) next()
+        condition()
+        outs.push(emit(0x1000))
+      } while (peek() === "and")
+      return outs
+    }
+
     if (word === "while") {
       next()
       const top = here()
-      condition()
-      const jumpOut = emit(0x1000)
+      const outs = conditions()
       block()
       emit(0x1000 | top)
-      code[jumpOut] = 0x1000 | here()
+      for (const o of outs) code[o] = 0x1000 | here()
       return
     }
 
@@ -424,26 +507,26 @@ export function compile(source) {
 
     if (word === "if") {
       next()
-      condition()
-      const jumpOver = emit(0x1000)
+      const outs = conditions()
+      const jumpOver = outs[outs.length - 1]
       block()
       skipNewlines()
       if (peek() === "else") {
         next()
         const jumpPastElse = emit(0x1000)
-        code[jumpOver] = 0x1000 | here()
+        for (const o of outs) code[o] = 0x1000 | here()
         // else if is another if in the else branch, without the braces.
         if (peek() === "if") statement()
         else block()
         code[jumpPastElse] = 0x1000 | here()
-      } else if (code.length === jumpOver + 2 && (code[jumpOver + 1] & 0xf000) !== 0x1000) {
+      } else if (outs.length === 1 && code.length === jumpOver + 2 && (code[jumpOver + 1] & 0xf000) !== 0x1000) {
         // A one-word body needs no jump: flip the skip and put the body
         // where the jump was. See DOCS.md for why jumps are left alone.
         code[jumpOver - 1] = flipSkip(code[jumpOver - 1])
         code[jumpOver] = code.pop()
         for (const c of calls) if (c.slot === jumpOver + 1) c.slot = jumpOver
       } else {
-        code[jumpOver] = 0x1000 | here()
+        for (const o of outs) code[o] = 0x1000 | here()
       }
       return
     }
@@ -459,6 +542,30 @@ export function compile(source) {
       block()
       emit(0x00ee)
       code[skip] = 0x1000 | here()
+      return
+    }
+
+    // name[i] = value puts a number or a variable into one cell.
+    if (arrays.has(word) && tokens[at + 1]?.text === "[") {
+      const name = next()
+      // The cell's address is worked out before v0 is touched, in case the
+      // index is v0 itself.
+      const parkNeeded = () => { const t = tokens[at]?.text; return !(isName(t) && vars.get(t) === 0) }
+      // Peek past ] = to see what is being stored.
+      let look = at
+      while (tokens[look] && tokens[look].text !== "=") look++
+      const valueTok = tokens[look + 1]?.text
+      const valueIsV0 = isName(valueTok ?? "") && vars.get(valueTok) === 0
+      if (!valueIsV0) parkV0()
+      cellRef(name, ln)
+      eat("=")
+      const value = next()
+      if (!valueIsV0) {
+        if (isName(value)) emit(0x8000 | (reg(value, ln) << 4))
+        else emit(0x6000 | (number(value, ln) & 0xff))
+      }
+      emit(0xf055)
+      if (!valueIsV0) unparkV0()
       return
     }
 
@@ -488,7 +595,16 @@ export function compile(source) {
       }
       if (op !== "=") throw new Fault(`expected = after ${name}, found ${op}`, ln)
       const first = next()
-      if (isName(first)) emit(0x8000 | (target << 8) | (reg(first, ln) << 4))
+      if (arrays.has(first)) {
+        // x = name[i]: the cell arrives in v0, then goes where it was asked for.
+        if (target !== 0) parkV0()
+        cellRef(first, ln)
+        emit(0xf065)
+        if (target !== 0) { emit(0x8000 | (target << 8)); unparkV0() }
+        return
+      }
+      // x = x + 1 needs no copy of x into itself first.
+      if (isName(first)) { if (reg(first, ln) !== target) emit(0x8000 | (target << 8) | (reg(first, ln) << 4)) }
       else emit(0x6000 | (target << 8) | (number(first, ln) & 0xff))
       // An optional second term, so x = y + 1 works as well as x = y.
       if (peek() === "+" || peek() === "-") {
@@ -504,6 +620,7 @@ export function compile(source) {
       return
     }
 
+    if (consts.has(word)) throw new Fault(`${word} is a constant, and only a variable can go there`, ln)
     throw new Fault(`did not understand ${word}`, ln)
   }
 
@@ -518,6 +635,20 @@ export function compile(source) {
       emitWait()
       emit(0x00ee)
       for (const slot of waitCalls) code[slot] = 0x2000 | at
+    }
+    if (showCalls.length) {
+      // The caller has done the BCD and set vD and vE; this parks v0 to v2,
+      // draws, and puts them back.
+      const at = here()
+      scratchRef(3)
+      emit(0xf255)
+      scratchRef(0)
+      emit(0xf265)
+      emitDigits()
+      scratchRef(3)
+      emit(0xf265)
+      emit(0x00ee)
+      for (const slot of showCalls) code[slot] = 0x2000 | at
     }
     if (printCalls.length) {
       // Reads a glyph offset from the table at V1, returns on 0xFF, otherwise
@@ -546,6 +677,10 @@ export function compile(source) {
       placed.set(name, PROGRAM_START + bytes.length)
       bytes.push(...rows)
     }
+    for (const [name, cells] of arrays) {
+      placed.set(name, PROGRAM_START + bytes.length)
+      bytes.push(...cells)
+    }
     for (const { slot, name, line: ln } of calls) {
       const address = routines.get(name)
       if (address === undefined) throw new Fault(`nothing here is called ${name}`, ln)
@@ -565,10 +700,11 @@ export function compile(source) {
     const glyphBase = glyphs.size ? glyphAt.values().next().value : PROGRAM_START + bytes.length
     const tableAt = PROGRAM_START + bytes.length
     bytes.push(...strings)
-    for (const { slot, name, scratch, glyph, table, glyphBase: base, line: ln } of fixups) {
-      const address = table ? tableAt : base ? glyphBase
+    for (const { slot, name, plus = 0, scratch, glyph, table, glyphBase: base, line: ln } of fixups) {
+      const found = table ? tableAt : base ? glyphBase
         : glyph !== undefined ? glyphAt.get(glyph)
         : scratch === undefined ? placed.get(name) : scratchAt + scratch
+      const address = found === undefined ? undefined : found + plus
       if (address === undefined) throw new Fault(`no sprite called ${name}`, ln)
       const word = 0xa000 | address
       bytes[slot * 2] = (word >> 8) & 0xff

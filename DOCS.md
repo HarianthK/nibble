@@ -82,6 +82,27 @@ is known.
 **Errors carry a line number** and name what was expected. A compiler that says
 only "syntax error" is a compiler you argue with.
 
+## Arrays, and why a cell costs what it does
+
+The machine moves bytes between memory and registers only through `FX55` and
+`FX65`, and those always start at `v0`. So reading `body[i]` into `x` means:
+park `v0` in the working memory, point `i` at the array, add the index
+register to `i`, load one byte into `v0`, copy it to `x`, and put `v0` back.
+Six instructions, or three when `x` is `v0` itself, which the compiler
+notices. Writing is the mirror image, with one care taken: the cell's address
+is worked out before `v0` is overwritten with the value, because the index
+might be `v0`. A test uses `v0` as the index for both a read and a write and
+checks it comes back untouched.
+
+A constant index is cheaper, since the address is settled at compile time and
+patched in like a sprite's. It is also checked against the array's length, so
+`a[4]` on a four cell array is refused rather than reading the next thing in
+memory.
+
+Snake is the reason arrays exist. Its body is two arrays of sixty four cells
+used as a ring: the head goes in at one end, the tail comes off the other, and
+growing is simply leaving the tail on for a step.
+
 ## Why `for` ends on a number
 
 `for x = a to b` tests for the end by comparing the counter with `b + 1`, one
@@ -127,6 +148,16 @@ the sixteen byte cost per print, and the routine is twenty two once, so the
 compiler adds both up against the inline cost before it starts and takes the
 smaller. A program that prints one short word stays inline. Meteors drops
 thirty seven bytes.
+
+`show` went the same way as `wait` later on, with one more thing folded in.
+It used to draw three digits always, so a score of seven read 007. It now
+skips the zeros in front, which costs five words, and a program that shows a
+number in two places gets one shared copy of the whole thing, which pays for
+those five words and more: Meteors went from 447 to 435 bytes while its score
+became readable. A program with a single show keeps it inline and pays the
+five words, so Catch went from 157 to 167. The display wait test had to
+change with it, since it had assumed a fixed number of draws per loop; it
+now compares the two runs after the same number of loops instead.
 
 The proof is not the unit test but a recording. Before the change, every
 example and game was compiled, run for six hundred frames under three key

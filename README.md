@@ -41,6 +41,7 @@ isolation, so a test can only pass if the whole path works.
 ## The language
 
 **Variables** live in the machine's registers, so there are thirteen of them.
+Each holds a byte, and a number outside 0 to 255 is refused rather than wrapped.
 
 ```
 var x = 30
@@ -48,6 +49,14 @@ x = 12
 x += 1
 x -= 4
 x = y + 3
+```
+
+**Constants** name a number. They cost nothing, since the number is put
+wherever the name is used, and they cannot be changed or used as a variable.
+
+```
+const RIGHT = 61
+if x > RIGHT { x = RIGHT }
 ```
 
 **Sprites** are rows of bytes, one bit per pixel, at most fifteen rows.
@@ -62,12 +71,25 @@ Drawing flips pixels rather than painting them, which is how the machine works.
 Drawing the same sprite twice in the same place rubs it out again, and that is
 how you move something: draw, erase, draw somewhere else.
 
+**Arrays** are the only memory beyond the thirteen variables. A cell holds a
+byte, the index can be a number or a variable, and reading or writing one
+costs a few instructions because the machine can only move bytes through its
+first register, which is parked and put back around the move.
+
+```
+array notes [ 3 5 7 ]
+array body [ 64 of 0 ]
+x = body[i]
+body[i] = x
+```
+
 **Conditions** cover equality, size, keys, and whether two sprites just
 touched.
 
 ```
 if x == 5 { ... } else { ... }
 if x == 5 { ... } else if x == 6 { ... } else { ... }
+if x == 5 and y == 6 { ... }
 if x != y { ... }
 if x < 10 { ... }
 if x > y { ... }
@@ -78,7 +100,8 @@ if hit { ... }
 
 `hit` is true when the sprite you just drew turned off a pixel that was already
 lit, which is the only collision test the machine has. Check it straight after
-a `draw`.
+a `draw`. `and` joins conditions: the body runs only when all of them hold, and
+the first one that fails is where the machine leaves.
 
 **Loops** run forever, until a condition fails, or once for each number in a
 range, ends included. The counter is one of your variables, the start can be a
@@ -107,9 +130,9 @@ There are no parameters and no local variables. Routines work on the same
 thirteen variables everything else does, because those are the machine's
 registers and there is nowhere else to put anything.
 
-**Numbers on screen.** `show score at 1, 0` writes a variable out as up to
-three digits, using the font built into the machine. That is how a game gets a
-score.
+**Numbers on screen.** `show score at 1, 0` writes a variable out in the
+font built into the machine, as many digits as it needs: 7, not 007. That is
+how a game gets a score.
 
 **Words on screen.** `print "GAME OVER" at 10, 6` writes text, four pixels wide
 and five tall per letter. Letters, digits and a little punctuation are all
@@ -141,17 +164,25 @@ ROM, which any CHIP-8 interpreter will run.
 
 ```bash
 node nibble.mjs games/catch.nib
-# games/catch.ch8  157 bytes
+# games/catch.ch8  167 bytes
 ```
 
 The example programs are in `games/` as `.nib` source, with their compiled ROMs
-beside them. `meteors.nib` is the fullest of them: a dodging game with a score,
-three lives, and an ending that says GAME OVER and offers another go, in 447
-bytes. It uses most of the language, including routines to start a fresh rock. Drop one into
+beside them. `meteors.nib` was the first real game: a dodging game with a score,
+three lives, and an ending that says GAME OVER and offers another go, in 435
+bytes. It uses most of the language, including routines to start a fresh rock.
+`pong.nib` is two player Pong with a score, first to nine, in 445 bytes.
+`snake.nib` is Snake, the body kept in two arrays used as a ring, in 616 bytes.
+`breakout.nib` keeps its bricks as an array of flags and finds the one under
+the ball by repeated subtraction, since the machine has no divide, in 717 bytes. Drop one into
 [the emulator](https://harianthk.github.io/chip8) under "Load a program" and it
 plays, with no mention of Nibble anywhere in the file. A test compiles the same
 program both ways and compares the output byte for byte, so the tool and the
 playground cannot drift apart.
+
+Add `--octo` and it also writes `games/catch.8o`, the same program as Octo
+source, read back from the bytes. That is a way out of Nibble: take the file
+to [Octo](https://johnearnest.github.io/Octo/) and carry on there.
 
 Mistakes name the file, the line, and the line's text:
 
