@@ -1,7 +1,8 @@
 // Compiles a Nibble program to a .ch8 file that any CHIP-8 machine will run.
-// Run: node nibble.mjs game.nib [-o game.ch8]
+// Run: node nibble.mjs game.nib [-o game.ch8] [--octo]
 import { readFileSync, writeFileSync } from "node:fs"
 import { compile } from "./compile.js"
+import { disassemble } from "./disassemble.js"
 
 const args = process.argv.slice(2)
 if (!args.length || args.includes("-h") || args.includes("--help")) {
@@ -9,6 +10,8 @@ if (!args.length || args.includes("-h") || args.includes("--help")) {
 
   node nibble.mjs game.nib             writes game.ch8 beside it
   node nibble.mjs game.nib -o out.ch8  writes somewhere of your choosing
+  node nibble.mjs game.nib --octo      also writes game.8o, the same program
+                                       as Octo source, to carry on in Octo
 
 The output is a plain ROM. Play it in any CHIP-8 interpreter, including the one
 at https://harianthk.github.io/chip8 under "Load a program".`)
@@ -38,3 +41,8 @@ if (error) {
 
 writeFileSync(output, bytes)
 console.log(`${output}  ${bytes.length} bytes`)
+if (args.includes("--octo")) {
+  const octo = output.replace(/\.ch8$/, "") + ".8o"
+  writeFileSync(octo, disassemble(bytes))
+  console.log(`${octo}  Octo source`)
+}
