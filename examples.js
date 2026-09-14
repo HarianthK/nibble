@@ -75,6 +75,328 @@ loop {
   while !key(E) { wait }
 }`,
 
+  "Snake": `# Snake. W A S D steer, eat the food, do not eat yourself.
+# The body lives in two arrays used as a ring: the head goes in at one end
+# and the tail comes off the other, so growing is just leaving the tail on.
+
+sprite block [ 0xC0 0xC0 ]
+
+const COLS = 32
+const ROWS = 16
+const RING = 64
+
+array bx [ 64 of 0 ]
+array by [ 64 of 0 ]
+
+var hx = 10
+var hy = 8
+var dir = 3
+var head = 0
+var tail = 0
+var fx = 20
+var fy = 8
+var px = 0
+var py = 0
+var over = 0
+var ate = 0
+
+# The grid is two pixels to a cell, so a cell is drawn at twice its number.
+def drawHead {
+  px = hx + hx
+  py = hy + hy
+  draw block at px, py
+}
+
+def drawTail {
+  px = bx[tail]
+  py = by[tail]
+  px = px + px
+  py = py + py
+  draw block at px, py
+}
+
+def placeFood {
+  rand fx, 0x1F
+  rand fy, 0x0F
+  px = fx + fx
+  py = fy + fy
+  draw block at px, py
+}
+
+loop {
+  clear
+  hx = 10
+  hy = 8
+  dir = 3
+  head = 0
+  tail = 0
+  over = 0
+  bx[0] = hx
+  by[0] = hy
+  drawHead
+  placeFood
+
+  while over == 0 {
+    if key(W) { dir = 0 }
+    else if key(A) { dir = 1 }
+    else if key(S) { dir = 2 }
+    else if key(D) { dir = 3 }
+
+    if dir == 0 { hy -= 1 }
+    else if dir == 1 { hx -= 1 }
+    else if dir == 2 { hy += 1 }
+    else { hx += 1 }
+    if hx == 255 { hx = 31 }
+    if hx == COLS { hx = 0 }
+    if hy == 255 { hy = 15 }
+    if hy == ROWS { hy = 0 }
+
+    head += 1
+    if head == RING { head = 0 }
+    bx[head] = hx
+    by[head] = hy
+
+    ate = 0
+    if hx == fx and hy == fy { ate = 1 }
+
+    if ate == 1 {
+      # The food is drawn where the head lands: one draw takes it off, the
+      # next puts the head there. The tail stays, which is the growing.
+      drawHead
+      drawHead
+      placeFood
+      beep 2
+    } else {
+      drawHead
+      if hit { over = 1 }
+      drawTail
+      tail += 1
+      if tail == RING { tail = 0 }
+    }
+    wait
+    wait
+    wait
+    wait
+  }
+
+  print "GAME OVER" at 14, 12
+  print "E TO PLAY" at 14, 20
+  while !key(E) { wait }
+  while key(E) { wait }
+}`,
+
+  "Breakout": `# Breakout. A and D move the paddle. Clear all twenty four bricks.
+# The bricks are an array of flags, one a brick. There is no divide, so the
+# brick under the ball is found by taking eights off the ball's x until it
+# runs out, and counting how many came off.
+
+sprite brick [ 0xFE 0xFE 0xFE ]
+sprite paddle [ 0xFC ]
+sprite ball [ 0x80 ]
+
+const LEFT = 0
+const RIGHT = 63
+const FLOOR = 31
+const PADDLE_Y = 30
+const NONE = 255
+
+array bricks [ 24 of 1 ]
+
+var px = 29
+var bx = 32
+var by = 20
+var dx = 1
+var dy = 0
+var col = 0
+var row = 0
+var t = 0
+var idx = 0
+var left = 24
+var lives = 3
+
+# Draws the brick at col, row. Its x is eight times the column and its y four
+# times the row, both done by doubling.
+def drawBrick {
+  t = col + col
+  t = t + t
+  t = t + t
+  row = row + row
+  row = row + row
+  draw brick at t, row
+}
+
+def drawAllBricks {
+  for idx = 0 to 23 {
+    t = bricks[idx]
+    if t == 1 {
+      row = 0
+      t = idx
+      while t > 7 { t -= 8  row += 1 }
+      col = t
+      drawBrick
+    }
+  }
+}
+
+# Which brick is the ball on. Leaves idx at it, or at NONE.
+def brickAt {
+  idx = NONE
+  if by < 12 {
+    col = 0
+    t = bx
+    while t > 7 { t -= 8  col += 1 }
+    row = 0
+    t = by
+    while t > 3 { t -= 4  row += 1 }
+    idx = row + row
+    idx = idx + idx
+    idx = idx + idx
+    idx = idx + col
+  }
+}
+
+loop {
+  clear
+  for idx = 0 to 23 { bricks[idx] = 1 }
+  left = 24
+  lives = 3
+  drawAllBricks
+  px = 29
+  bx = 32
+  by = 20
+  dx = 1
+  dy = 0
+  draw paddle at px, PADDLE_Y
+  draw ball at bx, by
+
+  while lives != 0 and left != 0 {
+    draw paddle at px, PADDLE_Y
+    if key(A) { px -= 1 }
+    if key(D) { px += 1 }
+    if px > 200 { px = 0 }
+    if px > 58 { px = 58 }
+    draw paddle at px, PADDLE_Y
+
+    draw ball at bx, by
+    if dx == 1 { bx += 1 } else { bx -= 1 }
+    if dy == 1 { by += 1 } else { by -= 1 }
+    if bx == LEFT { dx = 1 }
+    if bx == RIGHT { dx = 0 }
+    if by == 0 { dy = 1 }
+    draw ball at bx, by
+
+    if hit {
+      brickAt
+      t = 0
+      if idx != NONE { t = bricks[idx] }
+      if t == 1 {
+        # A brick. Take it off the screen, the ball with it, and put the
+        # ball back, so what is drawn stays honest.
+        bricks[idx] = 0
+        left -= 1
+        draw ball at bx, by
+        drawBrick
+        draw ball at bx, by
+        if dy == 1 { dy = 0 } else { dy = 1 }
+        beep 1
+      } else {
+        # The paddle, so the ball goes back up.
+        dy = 0
+        beep 1
+      }
+    }
+
+    if by == FLOOR {
+      lives -= 1
+      draw ball at bx, by
+      bx = px + 3
+      by = 20
+      dy = 0
+      draw ball at bx, by
+      beep 4
+    }
+    wait
+  }
+
+  clear
+  if left == 0 { print "YOU WIN" at 18, 8 } else { print "GAME OVER" at 14, 8 }
+  print "E TO PLAY" at 14, 18
+  while !key(E) { wait }
+  while key(E) { wait }
+}`,
+
+  "Pong": `# Pong for two. W and S move the left paddle, R and F the right.
+# First to nine wins, and E starts the next game.
+
+sprite paddle [ 0x80 0x80 0x80 0x80 0x80 0x80 ]
+sprite ball [ 0x80 ]
+
+const LOWEST = 26
+const TOP = 6
+const BOTTOM = 31
+
+var ly = 13
+var ry = 13
+var bx = 32
+var by = 16
+var dx = 1
+var dy = 1
+var ls = 0
+var rs = 0
+
+def serve {
+  bx = 32
+  by = 16
+  rand dy, 0x01
+}
+
+loop {
+  ls = 0
+  rs = 0
+  serve
+
+  while ls != 9 {
+    if rs == 9 { ls = 9 }
+
+    clear
+    show ls at 22, 0
+    show rs at 34, 0
+
+    if key(W) { ly -= 1 }
+    if key(S) { ly += 1 }
+    if key(R) { ry -= 1 }
+    if key(F) { ry += 1 }
+    if ly > 200 { ly = 0 }
+    if ly > LOWEST { ly = LOWEST }
+    if ry > 200 { ry = 0 }
+    if ry > LOWEST { ry = LOWEST }
+
+    if dx == 1 { bx += 1 } else { bx -= 1 }
+    if dy == 1 { by += 1 } else { by -= 1 }
+    # The score sits in the top rows, so the ball turns before it gets there.
+    if by == TOP { dy = 1 }
+    else if by == BOTTOM { dy = 0 }
+
+    draw paddle at 2, ly
+    draw paddle at 61, ry
+    draw ball at bx, by
+    if hit {
+      if dx == 1 { dx = 0 } else { dx = 1 }
+      beep 2
+    }
+
+    if bx == 0 { rs += 1  serve }
+    else if bx == 63 { ls += 1  serve }
+    wait
+  }
+
+  clear
+  print "GAME OVER" at 14, 8
+  print "E TO PLAY" at 14, 18
+  while !key(E) { wait }
+  while key(E) { wait }
+}`,
+
   "Move a ship": `# Arrow around the screen with W A S D.
 sprite ship [ 0x60 0xF0 0x90 ]
 

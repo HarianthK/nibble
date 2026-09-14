@@ -1,0 +1,139 @@
+# Breakout. A and D move the paddle. Clear all twenty four bricks.
+# The bricks are an array of flags, one a brick. There is no divide, so the
+# brick under the ball is found by taking eights off the ball's x until it
+# runs out, and counting how many came off.
+
+sprite brick [ 0xFE 0xFE 0xFE ]
+sprite paddle [ 0xFC ]
+sprite ball [ 0x80 ]
+
+const LEFT = 0
+const RIGHT = 63
+const FLOOR = 31
+const PADDLE_Y = 30
+const NONE = 255
+
+array bricks [ 24 of 1 ]
+
+var px = 29
+var bx = 32
+var by = 20
+var dx = 1
+var dy = 0
+var col = 0
+var row = 0
+var t = 0
+var idx = 0
+var left = 24
+var lives = 3
+
+# Draws the brick at col, row. Its x is eight times the column and its y four
+# times the row, both done by doubling.
+def drawBrick {
+  t = col + col
+  t = t + t
+  t = t + t
+  row = row + row
+  row = row + row
+  draw brick at t, row
+}
+
+def drawAllBricks {
+  for idx = 0 to 23 {
+    t = bricks[idx]
+    if t == 1 {
+      row = 0
+      t = idx
+      while t > 7 { t -= 8  row += 1 }
+      col = t
+      drawBrick
+    }
+  }
+}
+
+# Which brick is the ball on. Leaves idx at it, or at NONE.
+def brickAt {
+  idx = NONE
+  if by < 12 {
+    col = 0
+    t = bx
+    while t > 7 { t -= 8  col += 1 }
+    row = 0
+    t = by
+    while t > 3 { t -= 4  row += 1 }
+    idx = row + row
+    idx = idx + idx
+    idx = idx + idx
+    idx = idx + col
+  }
+}
+
+loop {
+  clear
+  for idx = 0 to 23 { bricks[idx] = 1 }
+  left = 24
+  lives = 3
+  drawAllBricks
+  px = 29
+  bx = 32
+  by = 20
+  dx = 1
+  dy = 0
+  draw paddle at px, PADDLE_Y
+  draw ball at bx, by
+
+  while lives != 0 and left != 0 {
+    draw paddle at px, PADDLE_Y
+    if key(A) { px -= 1 }
+    if key(D) { px += 1 }
+    if px > 200 { px = 0 }
+    if px > 58 { px = 58 }
+    draw paddle at px, PADDLE_Y
+
+    draw ball at bx, by
+    if dx == 1 { bx += 1 } else { bx -= 1 }
+    if dy == 1 { by += 1 } else { by -= 1 }
+    if bx == LEFT { dx = 1 }
+    if bx == RIGHT { dx = 0 }
+    if by == 0 { dy = 1 }
+    draw ball at bx, by
+
+    if hit {
+      brickAt
+      t = 0
+      if idx != NONE { t = bricks[idx] }
+      if t == 1 {
+        # A brick. Take it off the screen, the ball with it, and put the
+        # ball back, so what is drawn stays honest.
+        bricks[idx] = 0
+        left -= 1
+        draw ball at bx, by
+        drawBrick
+        draw ball at bx, by
+        if dy == 1 { dy = 0 } else { dy = 1 }
+        beep 1
+      } else {
+        # The paddle, so the ball goes back up.
+        dy = 0
+        beep 1
+      }
+    }
+
+    if by == FLOOR {
+      lives -= 1
+      draw ball at bx, by
+      bx = px + 3
+      by = 20
+      dy = 0
+      draw ball at bx, by
+      beep 4
+    }
+    wait
+  }
+
+  clear
+  if left == 0 { print "YOU WIN" at 18, 8 } else { print "GAME OVER" at 14, 8 }
+  print "E TO PLAY" at 14, 18
+  while !key(E) { wait }
+  while key(E) { wait }
+}
