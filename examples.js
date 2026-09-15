@@ -1,7 +1,7 @@
 // The programs offered in the playground. Each one compiles and runs as it is.
 export const EXAMPLES = {
   "Meteors": `# Meteors. A and D to move, dodge the falling rocks.
-# Three lives, then it tells you the score and E plays again.
+# Three lives, then it tells you the score and any key plays again.
 
 sprite ship [ 0x60 0xF0 0x90 ]
 sprite rock [ 0xC0 0xC0 ]
@@ -13,6 +13,7 @@ var bx = 40
 var by = 14
 var score = 0
 var lives = 3
+var k = 0
 
 def dropA {
   ay = 0
@@ -71,8 +72,8 @@ loop {
   print "GAME OVER" at 10, 6
   print "SCORE" at 10, 14
   show score at 40, 14
-  print "E TO PLAY" at 10, 22
-  while !key(E) { wait }
+  print "ANY KEY" at 10, 22
+  k = key
 }`,
 
   "Snake": `# Snake. W A S D steer, eat the food, do not eat yourself.
@@ -180,9 +181,9 @@ loop {
   }
 
   print "GAME OVER" at 14, 12
-  print "E TO PLAY" at 14, 20
-  while !key(E) { wait }
-  while key(E) { wait }
+  print "ANY KEY" at 14, 20
+  # key waits for the press and the release, so it cannot leak into the next game.
+  over = key
 }`,
 
   "Breakout": `# Breakout. A and D move the paddle. Clear all twenty four bricks.

@@ -1,5 +1,5 @@
 # Meteors. A and D to move, dodge the falling rocks.
-# Three lives, then it tells you the score and E plays again.
+# Three lives, then it tells you the score and any key plays again.
 
 sprite ship [ 0x60 0xF0 0x90 ]
 sprite rock [ 0xC0 0xC0 ]
@@ -11,6 +11,7 @@ var bx = 40
 var by = 14
 var score = 0
 var lives = 3
+var k = 0
 
 def dropA {
   ay = 0
@@ -69,6 +70,6 @@ loop {
   print "GAME OVER" at 10, 6
   print "SCORE" at 10, 14
   show score at 40, 14
-  print "E TO PLAY" at 10, 22
-  while !key(E) { wait }
+  print "ANY KEY" at 10, 22
+  k = key
 }

@@ -103,7 +103,7 @@ loop {
   }
 
   print "GAME OVER" at 14, 12
-  print "E TO PLAY" at 14, 20
-  while !key(E) { wait }
-  while key(E) { wait }
+  print "ANY KEY" at 14, 20
+  # key waits for the press and the release, so it cannot leak into the next game.
+  over = key
 }

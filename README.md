@@ -177,10 +177,10 @@ node nibble.mjs games/catch.nib
 
 The example programs are in `games/` as `.nib` source, with their compiled ROMs
 beside them. `meteors.nib` was the first real game: a dodging game with a score,
-three lives, and an ending that says GAME OVER and offers another go, in 435
+three lives, and an ending that says GAME OVER and offers another go, in 418
 bytes. It uses most of the language, including routines to start a fresh rock.
 `pong.nib` is two player Pong with a score, first to nine, in 445 bytes.
-`snake.nib` is Snake, the body kept in two arrays used as a ring, in 616 bytes.
+`snake.nib` is Snake, the body kept in two arrays used as a ring, in 591 bytes.
 `breakout.nib` keeps its bricks as an array of flags and finds the one under
 the ball by repeated subtraction, since the machine has no divide, in 717 bytes. Drop one into
 [the emulator](https://harianthk.github.io/chip8) under "Load a program" and it
