@@ -171,6 +171,25 @@ than the longest loop body, or it measures speed rather than behaviour. A
 smaller program gets further in thirty steps, and the two games with the
 longest loops showed as changed until every program was paced by its `wait`.
 
+## `break`, and waiting for a key
+
+Two things the games kept wanting and the language could not say.
+
+`break` compiles to a jump with nowhere to go yet. Each loop that opens
+pushes an empty list; every `break` inside it adds its jump's slot to the
+top list; when the loop closes, all of them are patched to the address just
+past it, together with the loop's own exit. Nesting falls out of the stack:
+a `break` in a `for` inside a `loop` leaves the `for`, because the `for`'s
+list is the one on top. Outside any loop it is refused at compile time,
+since a jump to nowhere would be the worst kind of bug to find at run time.
+
+`k = key` is the machine's `FX0A`, and it is the only way a program can
+wait without knowing which key is coming. On the original hardware, and on
+this emulator, that instruction completes when the key is released, not
+when it goes down, so the test for it presses a key, runs, releases it, and
+only then expects the program to have moved on. A version that stored a
+number and carried on failed that test, which is how the test was checked.
+
 ## A bug worth recording
 
 The lexer originally had no rule for a bare `!`, only for `!=`. So `!key(D)`

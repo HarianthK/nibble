@@ -837,5 +837,39 @@ check("mistakes are reported with a line number", () => {
   assert(second.error, "assigning to an undeclared variable should be an error")
 })
 
+check("x = key waits for a key to be pressed and let go, then holds its number", () => {
+  const source = "var k = 0\nk = key\nsprite dot [ 0x80 ]\ndraw dot at k, 0\nhalt\n"
+  const held = run(source, { frames: 30, keys: [7] })
+  assert(litCount(held) === 0, "the program should still be waiting while the key is down")
+  const { bytes } = compile(source)
+  const cpu = new Chip8()
+  cpu.load(bytes)
+  for (let f = 0; f < 10; f++) { for (let i = 0; i < 30; i++) cpu.step(); cpu.tickTimers() }
+  cpu.keyDown(7)
+  for (let i = 0; i < 30; i++) cpu.step()
+  cpu.keyUp(7)
+  for (let i = 0; i < 30; i++) if (!cpu.halted) cpu.step()
+  assert(on(cpu, 7, 0), "the dot should be drawn at the number of the key that was pressed")
+})
+
+check("break leaves the loop it is in, and only that one", () => {
+  const source = [
+    "var x = 0", "var y = 0",
+    "loop {",
+    "  x = x + 1",
+    "  for y = 1 to 9 { if y == 3 { break } }",
+    "  if x == 5 { break }",
+    "}",
+    "sprite dot [ 0x80 ]",
+    "draw dot at x, y",
+    "halt", "",
+  ].join("\n")
+  const cpu = run(source, { frames: 10 })
+  assert(cpu.halted, "the program should have got out of the loop and halted")
+  assert(on(cpu, 5, 3), "expected the dot at 5, 3 (x reached 5, y stopped at 3)")
+  const { error } = compile("var x = 0\nbreak\n")
+  assert(error && /inside a loop/.test(error.message), "break outside a loop should be refused")
+})
+
 console.log(`\n${passed} passed, ${failed} failed\n`)
 process.exit(failed ? 1 : 0)

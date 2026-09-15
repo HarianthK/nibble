@@ -90,6 +90,7 @@ export function compile(source) {
   const arrays = new Map()
   const routines = new Map()
   const calls = []
+  const breaks = [] // one list of jump slots per loop currently open
   // One tick of the delay timer, which the machine counts down at 60Hz.
   const emitWait = () => {
     emit(0x6000 | (SCRATCH_A << 8) | 1)
@@ -451,11 +452,27 @@ export function compile(source) {
       return
     }
 
+    // break inside a loop leaves it. Each open loop collects its own breaks.
+    const loopBody = () => {
+      breaks.push([])
+      block()
+      return breaks.pop()
+    }
+    const closeLoop = (outs) => { for (const o of outs) code[o] = 0x1000 | here() }
+
+    if (word === "break") {
+      next()
+      if (!breaks.length) throw new Fault("break is only for inside a loop", ln)
+      breaks[breaks.length - 1].push(emit(0x1000))
+      return
+    }
+
     if (word === "loop") {
       next()
       const top = here()
-      block()
+      const outs = loopBody()
       emit(0x1000 | top)
+      closeLoop(outs)
       return
     }
 
@@ -475,9 +492,9 @@ export function compile(source) {
       next()
       const top = here()
       const outs = conditions()
-      block()
+      const broken = loopBody()
       emit(0x1000 | top)
-      for (const o of outs) code[o] = 0x1000 | here()
+      closeLoop([...outs, ...broken])
       return
     }
 
@@ -498,10 +515,10 @@ export function compile(source) {
       const top = here()
       emit(0x4000 | (target << 8) | (last + 1))
       const jumpOut = emit(0x1000)
-      block()
+      const broken = loopBody()
       emit(0x7000 | (target << 8) | 1)
       emit(0x1000 | top)
-      code[jumpOut] = 0x1000 | here()
+      closeLoop([jumpOut, ...broken])
       return
     }
 
@@ -595,6 +612,8 @@ export function compile(source) {
       }
       if (op !== "=") throw new Fault(`expected = after ${name}, found ${op}`, ln)
       const first = next()
+      // x = key holds the program until a key is pressed and let go.
+      if (first === "key" && peek() !== "(") { emit(0xf00a | (target << 8)); return }
       if (arrays.has(first)) {
         // x = name[i]: the cell arrives in v0, then goes where it was asked for.
         if (target !== 0) parkV0()

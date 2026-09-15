@@ -111,7 +111,10 @@ number or another variable, and the end has to be a number.
 loop { ... }
 while x != 10 { ... }
 for x = 2 to 9 { draw dot at x, 3 }
+loop { if key(E) { break } }
 ```
+
+`break` leaves the loop it is written in, and only that one.
 
 **Routines** let you name a piece of code and use it more than once. Call one by
 writing its name on a line of its own. A routine can be called before it appears
@@ -138,6 +141,11 @@ how a game gets a score.
 and five tall per letter. Letters, digits and a little punctuation are all
 there, and only the characters a program actually uses are carried in the
 output, so a program saying one word does not pay for the whole alphabet.
+
+**Waiting for a key.** `k = key` stops the program until a key is pressed and
+let go, then leaves that key's number in the variable. That is how a title
+screen waits for the player, and it is the one thing the keypad can do that
+`if key(A)` cannot: it does not need to know which key.
 
 **The rest.** `clear` wipes the screen. `wait` holds until the next sixtieth of
 a second, which is how you get a steady frame rate. `rand name, 0x3F` puts a
