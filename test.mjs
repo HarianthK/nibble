@@ -871,5 +871,27 @@ check("break leaves the loop it is in, and only that one", () => {
   assert(error && /inside a loop/.test(error.message), "break outside a loop should be refused")
 })
 
+check("Guess the number takes one guess per press, hints, and stops on the right one", () => {
+  const { bytes, error } = compile(readFileSync("games/guess.nib", "utf8"))
+  assert(!error, error?.message)
+  const cpu = new Chip8()
+  cpu.load(bytes)
+  const frames = (n) => { for (let f = 0; f < n; f++) { for (let i = 0; i < 30; i++) cpu.step(); cpu.tickTimers() } }
+  const press = (k) => { cpu.keyDown(k); frames(5); cpu.keyUp(k); frames(40) }
+  frames(40)
+  const number = cpu.v[0]
+  assert(number >= 1 && number <= 8, `the number should be 1 to 8, got ${number}`)
+  const hold = (k) => { cpu.keyDown(k); frames(40) }
+  hold(number === 1 ? 2 : 1)
+  assert(cpu.v[2] === 0, "a key that is still held is not a guess yet")
+  cpu.keyUp(number === 1 ? 2 : 1); frames(40)
+  assert(cpu.v[2] === 1, `one release should be one guess, tries is ${cpu.v[2]}`)
+  const hint = litCount(cpu)
+  assert(hint > 0 && (on(cpu, 20, 14) || on(cpu, 21, 14) || on(cpu, 20, 15)), "a wrong guess should print a hint at 20, 14")
+  press(number)
+  assert(cpu.v[2] === 2, "the right guess should be the second try")
+  assert(on(cpu, 30, 16) || on(cpu, 31, 16) || on(cpu, 30, 17), "the ending should show the count at 30, 16")
+})
+
 console.log(`\n${passed} passed, ${failed} failed\n`)
 process.exit(failed ? 1 : 0)
