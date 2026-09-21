@@ -477,6 +477,43 @@ loop {
   wait
 }`,
 
+  "Guess the number": `# Guess the number. The machine picks 1 to 8, you press a number key.
+# It says HIGHER or LOWER after each try, and counts the tries when you get it.
+# Keys 1 to 8 on the keypad are 1 2 3 Q W E A S on a keyboard.
+
+var number = 0
+var guess = 0
+var tries = 0
+
+loop {
+  clear
+  print "GUESS 1 TO 8" at 2, 4
+  rand number, 0x07
+  number += 1
+  tries = 0
+
+  loop {
+    # key waits for a press and its release, so one press is one guess.
+    guess = key
+    tries += 1
+    if guess == number { break }
+    clear
+    print "GUESS 1 TO 8" at 2, 4
+    if guess < number {
+      print "HIGHER" at 20, 14
+    } else {
+      print "LOWER" at 20, 14
+    }
+    show tries at 30, 24
+  }
+
+  clear
+  print "GOT IT IN" at 12, 8
+  show tries at 30, 16
+  print "ANY KEY" at 18, 24
+  guess = key
+}`,
+
   "Stars": `# Forty stars at random, then a fresh sky whenever you press X.
 # A for loop runs its body once for each number, ends included.
 sprite star [ 0x80 ]

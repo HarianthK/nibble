@@ -181,6 +181,10 @@ three lives, and an ending that says GAME OVER and offers another go, in 418
 bytes. It uses most of the language, including routines to start a fresh rock.
 `pong.nib` is two player Pong with a score, first to nine, in 445 bytes.
 `snake.nib` is Snake, the body kept in two arrays used as a ring, in 591 bytes.
+`guess.nib` is Guess the Number, in 377 bytes: the machine picks 1 to 8, you
+press a key, it says HIGHER or LOWER, and it counts your tries. It is the
+example for `key` and `break`: one press is one guess, and the guessing loop
+ends the moment the guess is right.
 `breakout.nib` keeps its bricks as an array of flags and finds the one under
 the ball by repeated subtraction, since the machine has no divide, in 717 bytes. Drop one into
 [the emulator](https://harianthk.github.io/chip8) under "Load a program" and it
