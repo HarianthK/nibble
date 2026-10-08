@@ -202,3 +202,25 @@ The same gap was waiting for `<` and `>`, which the lexer also had no rule for,
 only `<=` and `>=`. Knowing the shape of the bug is what made it a two second
 fix the second time rather than an afternoon.
 
+
+## Bits, and the subtraction that always gave 0
+
+`&`, `|` and `^` map straight onto the machine's 8XY1, 8XY2 and 8XY3, which only
+work between two registers. A number on the right is loaded into a scratch
+register first, so `x &= 63` costs two instructions and `x &= mask` one.
+
+Shifts were the interesting part. Interpreters disagree about 8XY6 and 8XYE:
+the original COSMAC VIP shifts VY and puts the result in VX, while later ones
+shift VX and ignore VY. Nibble writes every shift with X and Y the same
+register, and then both readings are the same instruction. A shift of n places
+is n instructions, since the machine only ever moves one place; more than 7
+would empty the byte, so it is refused. The check runs every case with the shift
+quirk set both ways.
+
+Adding the second-term form, `x = y & 15`, turned up a bug that had been there
+since the first version. An assignment with two terms copied the first term
+into the variable and then applied the second, so `x = y - x` copied y over x
+and then computed x - x: always 0. `x = y + x` gave y + y. Now when the second
+term is the variable itself, it is done in place: addition and the bitwise
+operators do not care about order, and subtraction uses 8XY7, the machine's
+reversed subtract, which computes VY - VX directly.

@@ -60,7 +60,7 @@ function lex(source) {
     }
     // The two character operators have to be tried before the single ones, or
     // != would come out as ! followed by =.
-    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|[+\-]=|[=!<>]=|[=+\-*!<>])/g
+    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-&|^]=|[=!<>]=|[=+\-*!<>&|^])/g
     let m
     while ((m = re.exec(stripped))) tokens.push({ text: m[1], line })
     tokens.push({ text: "\n", line })
@@ -197,6 +197,15 @@ export function compile(source) {
     // mistake rather than the one asked for.
     if (n < 0 || n > 255) throw new Fault(`${t} is outside 0 to 255, which is all a byte can hold`, ln)
     return n
+  }
+
+  // AND, OR and XOR only work between registers, so a number goes through a scratch one first.
+  const BITWISE = { "&": 2, "|": 1, "^": 3 }
+  const isBitwise = (t) => t === "&" || t === "|" || t === "^"
+  const operand = (t, ln) => {
+    if (isName(t)) return reg(t, ln)
+    emit(0x6000 | (SCRATCH_A << 8) | (number(t, ln) & 0xff))
+    return SCRATCH_A
   }
 
   // Loads a value into a scratch register when an instruction needs one there.
@@ -587,7 +596,7 @@ export function compile(source) {
     }
 
     // A name on its own is a call. A name followed by an operator is not.
-    if (isName(word) && !["=", "+=", "-="].includes(tokens[at + 1]?.text)) {
+    if (isName(word) && !["=", "+=", "-=", "&=", "|=", "^=", "<<=", ">>="].includes(tokens[at + 1]?.text)) {
       const name = next()
       const slot = emit(0x2000)
       calls.push({ slot, name, line: ln })
@@ -610,6 +619,19 @@ export function compile(source) {
         }
         return
       }
+      if (op === "&=" || op === "|=" || op === "^=") {
+        const from = operand(next(), ln)
+        emit(0x8000 | (target << 8) | (from << 4) | BITWISE[op[0]])
+        return
+      }
+      if (op === "<<=" || op === ">>=") {
+        // One place per instruction, shifting x by itself: interpreters disagree on whether
+        // 8XY6 shifts VX or VY, and with X and Y the same the answer is the same either way.
+        const n = number(next(), ln)
+        if (n < 1 || n > 7) throw new Fault(`a shift moves 1 to 7 places, not ${n}`, ln)
+        for (let i = 0; i < n; i++) emit(0x8000 | (target << 8) | (target << 4) | (op === "<<=" ? 0xe : 0x6))
+        return
+      }
       if (op !== "=") throw new Fault(`expected = after ${name}, found ${op}`, ln)
       const first = next()
       // x = key holds the program until a key is pressed and let go.
@@ -625,13 +647,11 @@ export function compile(source) {
       // x = y - x: copying y in first would destroy x, so the machine's reversed subtract
       // (VX = VY - VX) does it in place; a number first goes through a scratch register.
       const second = tokens[at + 1]?.text
-      if ((peek() === "+" || peek() === "-") && isName(second) && reg(second, ln) === target && !(isName(first) && reg(first, ln) === target)) {
+      if ((peek() === "+" || peek() === "-" || isBitwise(peek())) && isName(second) && reg(second, ln) === target && !(isName(first) && reg(first, ln) === target)) {
         const sign = next()
         next()
-        let from = SCRATCH_A
-        if (isName(first)) from = reg(first, ln)
-        else emit(0x6000 | (SCRATCH_A << 8) | (number(first, ln) & 0xff))
-        emit(0x8000 | (target << 8) | (from << 4) | (sign === "+" ? 4 : 7))
+        const from = operand(first, ln)
+        emit(0x8000 | (target << 8) | (from << 4) | (sign === "+" ? 4 : sign === "-" ? 7 : BITWISE[sign]))
         return
       }
       // x = x + 1 needs no copy of x into itself first.
@@ -647,6 +667,10 @@ export function compile(source) {
           const n = number(t, ln) & 0xff
           emit(0x7000 | (target << 8) | ((sign === "+" ? n : 256 - n) & 0xff))
         }
+      } else if (isBitwise(peek())) {
+        const sign = next()
+        const from = operand(next(), ln)
+        emit(0x8000 | (target << 8) | (from << 4) | BITWISE[sign])
       }
       return
     }

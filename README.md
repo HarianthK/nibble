@@ -49,7 +49,18 @@ x = 12
 x += 1
 x -= 4
 x = y + 3
+x &= 63
+x = y | 0x80
+x ^= mask
+x >>= 2
 ```
+
+`&`, `|` and `^` are the machine's own AND, OR and XOR, one instruction each
+between two variables. `x &= 63` is the cheap way to wrap a position around
+the 64-pixel-wide screen. Shifts move one place per instruction, 1 to 7 places,
+and give the same answer on every interpreter. Do them before a `draw`, not
+between a `draw` and its `if hit`: some interpreters clear the collision flag
+on AND, OR and XOR.
 
 **Constants** name a number. They cost nothing, since the number is put
 wherever the name is used, and they cannot be changed or used as a variable.

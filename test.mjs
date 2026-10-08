@@ -499,6 +499,34 @@ check("assigning a variable to itself with a change costs one instruction", () =
   assert(on(cpu, 4, 0), "x should be 4")
 })
 
+check("and, or, xor and shifts give the right byte, on any interpreter", () => {
+  const cases = [
+    ["var x = 0xF5\nx &= 0x3C", 0, 0x34],
+    ["var x = 0x50\nvar m = 0x0A\nx |= m", 0, 0x5a],
+    ["var x = 0xFF\nx ^= 0x0F", 0, 0xf0],
+    ["var a = 0x9C\nvar x = 0\nx = a & 63", 1, 0x1c],
+    ["var a = 0x0C\nvar x = 0x30\nx = a | x", 1, 0x3c],
+    ["var x = 0x0F\nx = 0xFF ^ x", 0, 0xf0],
+    ["var x = 0x41\nx <<= 2", 0, 0x04],
+    ["var x = 0xB4\nx >>= 3", 0, 0x16],
+  ]
+  for (const [source, register, want] of cases) {
+    const { bytes, error } = compile(source + "\nhalt")
+    assert(!error, `${JSON.stringify(source)}: ${error && error.message}`)
+    // Interpreters disagree on whether a shift reads VX or VY, so try both.
+    for (const shift of [false, true]) {
+      const cpu = new Chip8()
+      cpu.quirks.shift = shift
+      cpu.load(bytes)
+      for (let i = 0; i < 100 && !cpu.halted; i++) cpu.step()
+      const got = cpu.v[register]
+      assert(got === want, `${JSON.stringify(source)} left 0x${got.toString(16)}, not 0x${want.toString(16)} (shift quirk ${shift})`)
+    }
+  }
+  const tooFar = compile("var x = 1\nx <<= 8\nhalt").error
+  assert(tooFar && tooFar.line === 2 && /1 to 7/.test(tooFar.message), `a shift of 8 should be refused: ${tooFar && tooFar.message}`)
+})
+
 check("x = y - x uses x before it is overwritten", () => {
   // Copying y into x first would leave x - x, always 0, and turn y + x into y + y.
   const cases = [
