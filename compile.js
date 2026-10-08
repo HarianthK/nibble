@@ -622,6 +622,18 @@ export function compile(source) {
         if (target !== 0) { emit(0x8000 | (target << 8)); unparkV0() }
         return
       }
+      // x = y - x: copying y in first would destroy x, so the machine's reversed subtract
+      // (VX = VY - VX) does it in place; a number first goes through a scratch register.
+      const second = tokens[at + 1]?.text
+      if ((peek() === "+" || peek() === "-") && isName(second) && reg(second, ln) === target && !(isName(first) && reg(first, ln) === target)) {
+        const sign = next()
+        next()
+        let from = SCRATCH_A
+        if (isName(first)) from = reg(first, ln)
+        else emit(0x6000 | (SCRATCH_A << 8) | (number(first, ln) & 0xff))
+        emit(0x8000 | (target << 8) | (from << 4) | (sign === "+" ? 4 : 7))
+        return
+      }
       // x = x + 1 needs no copy of x into itself first.
       if (isName(first)) { if (reg(first, ln) !== target) emit(0x8000 | (target << 8) | (reg(first, ln) << 4)) }
       else emit(0x6000 | (target << 8) | (number(first, ln) & 0xff))

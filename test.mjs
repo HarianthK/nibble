@@ -499,6 +499,21 @@ check("assigning a variable to itself with a change costs one instruction", () =
   assert(on(cpu, 4, 0), "x should be 4")
 })
 
+check("x = y - x uses x before it is overwritten", () => {
+  // Copying y into x first would leave x - x, always 0, and turn y + x into y + y.
+  const cases = [
+    ["var a = 10\nvar b = 3\nb = a - b", 1, 7],
+    ["var a = 10\nvar b = 3\nb = a + b", 1, 13],
+    ["var b = 3\nb = 10 - b", 0, 7],
+    ["const TEN = 10\nvar b = 3\nb = TEN - b", 0, 7],
+    ["var a = 10\nvar b = 3\nb = a - 4", 1, 6],
+  ]
+  for (const [source, register, want] of cases) {
+    const cpu = run(source + "\nhalt")
+    assert(cpu.v[register] === want, `${JSON.stringify(source)} left ${cpu.v[register]}, not ${want}`)
+  }
+})
+
 check("an array cell can be read into any variable and written from any", () => {
   // Variables are registers in order, so a is v0, b is v1, i is v2.
   const cpu = run(`
