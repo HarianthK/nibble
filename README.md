@@ -196,6 +196,12 @@ bytes. It uses most of the language, including routines to start a fresh rock.
 press a key, it says HIGHER or LOWER, and it counts your tries. It is the
 example for `key` and `break`: one press is one guess, and the guessing loop
 ends the moment the guess is right.
+`lights.nib` is Lights Out on the keypad, in 578 bytes: the sixteen keys are a
+4 by 4 board, and pressing one flips it and its neighbours. It is the example
+for the bit operators: each row is a byte, a press is one `^=`, the neighbours'
+mask is built with `<<=`, `>>=` and `|=`, and cells are placed with `<<= 3`
+since the machine cannot multiply. Puzzles are made by pressing keys at random
+from all off, so every one can be solved.
 `breakout.nib` keeps its bricks as an array of flags and finds the one under
 the ball by repeated subtraction, since the machine has no divide, in 717 bytes. Drop one into
 [the emulator](https://harianthk.github.io/chip8) under "Load a program" and it

@@ -1,0 +1,109 @@
+# Lights Out on the keypad. Each key is a light: pressing one flips it and the lights
+# beside it, above and below. Turn them all off. 1 2 3 4, Q W E R, A S D F, Z X C V.
+sprite cell [ 0xFC 0xFC 0xFC 0xFC 0xFC 0xFC ]
+
+# Each row is one byte, its four low bits the four lights, the left one worth 8.
+array rows [ 4 of 0 ]
+array bit [ 8 4 2 1 ]
+# Where each key's number sits on the keypad.
+array rowof [ 3 0 0 0 1 1 1 2 2 2 3 3 0 1 2 3 ]
+array colof [ 1 0 1 2 0 1 2 0 1 2 0 2 3 3 3 3 ]
+
+var k = 0
+var i = 0
+var c = 0
+var m = 0
+var t = 0
+var x = 0
+var y = 0
+var b = 0
+var j = 0
+var s = 0
+var n = 0
+var moves = 0
+
+# Flip light k and its neighbours. The row's mask is the light shifted both ways, joined
+# with or, then cut back to four bits; the rows above and below flip just that column.
+def press {
+  i = rowof[k]
+  c = colof[k]
+  m = bit[c]
+  t = m
+  t <<= 1
+  t |= m
+  x = m
+  x >>= 1
+  t |= x
+  t &= 15
+  b = rows[i]
+  b ^= t
+  rows[i] = b
+  if i > 0 {
+    j = i
+    j -= 1
+    b = rows[j]
+    b ^= m
+    rows[j] = b
+  }
+  if i < 3 {
+    j = i
+    j += 1
+    b = rows[j]
+    b ^= m
+    rows[j] = b
+  }
+}
+
+# s is every row or-ed together: 0 only when all the lights are off.
+def total {
+  s = 0
+  for i = 0 to 3 {
+    b = rows[i]
+    s |= b
+  }
+}
+
+def drawGrid {
+  clear
+  for i = 0 to 3 {
+    b = rows[i]
+    y = i
+    y <<= 3
+    for c = 0 to 3 {
+      t = bit[c]
+      t &= b
+      if t != 0 {
+        x = c
+        x <<= 3
+        x += 16
+        draw cell at x, y
+      }
+    }
+  }
+  show moves at 54, 0
+}
+
+loop {
+  # A puzzle made by pressing keys at random from all off, so it can always be solved.
+  moves = 0
+  s = 0
+  while s == 0 {
+    for n = 1 to 6 {
+      rand k, 15
+      press
+    }
+    total
+  }
+  loop {
+    drawGrid
+    k = key
+    press
+    moves += 1
+    total
+    if s == 0 { break }
+  }
+  clear
+  print "SOLVED" at 18, 8
+  show moves at 30, 18
+  k = key
+}

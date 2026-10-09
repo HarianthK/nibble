@@ -914,6 +914,51 @@ check("break leaves the loop it is in, and only that one", () => {
   assert(error && /inside a loop/.test(error.message), "break outside a loop should be refused")
 })
 
+check("Lights Out flips the right lights for every key and can be solved", () => {
+  const { bytes, error } = compile(readFileSync("games/lights.nib", "utf8"))
+  assert(!error, error?.message)
+  const cpu = new Chip8()
+  cpu.load(bytes)
+  const frames = (n) => { for (let f = 0; f < n; f++) { for (let i = 0; i < 60; i++) cpu.step(); cpu.tickTimers() } }
+  // The board as the screen shows it: a light is a lit 6 by 6 cell, 8 pixels apart.
+  const board = () => [0, 1, 2, 3].map((r) => [0, 1, 2, 3].reduce((row, c) => row | (on(cpu, 16 + c * 8 + 2, r * 8 + 2) ? 8 >> c : 0), 0))
+  // The keypad as it sits on a keyboard: the key number at each row and column.
+  const KEY_AT = [[1, 2, 3, 0xc], [4, 5, 6, 0xd], [7, 8, 9, 0xe], [0xa, 0, 0xb, 0xf]]
+  // The rules, written again here from the description, not from the program.
+  const flip = (rows, r, c) => rows.map((row, i) => i === r ? row ^ ((8 >> c) | (c > 0 ? 8 >> (c - 1) : 0) | (c < 3 ? 8 >> (c + 1) : 0)) : Math.abs(i - r) === 1 ? row ^ (8 >> c) : row)
+  // Seeded, so the puzzle is the same every run and the sweep below never solves it by chance.
+  const real = Math.random
+  let seed = 7
+  Math.random = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+  try { frames(60) } finally { Math.random = real }
+  let rows = board()
+  assert(rows.some((r) => r), "the puzzle should start with some lights on")
+  // Every key once, each checked against the rules, so no key's place on the pad goes untested.
+  for (let b = 0; b < 16; b++) {
+    const r = b >> 2, c = b & 3
+    cpu.keyDown(KEY_AT[r][c]); frames(3); cpu.keyUp(KEY_AT[r][c]); frames(20)
+    rows = flip(rows, r, c)
+    assert(board().join() === rows.join(), `after pressing row ${r} column ${c} the board is ${board()}, not ${rows}`)
+  }
+  const swept = 16
+  // Every set of presses, until one turns everything off. Reachable boards always have one.
+  let plan = null
+  for (let set = 0; set < 1 << 16 && !plan; set++) {
+    let test = rows
+    for (let b = 0; b < 16; b++) if (set & (1 << b)) test = flip(test, b >> 2, b & 3)
+    if (test.every((r) => r === 0)) plan = [...Array(16).keys()].filter((b) => set & (1 << b))
+  }
+  assert(plan, `no solution for ${rows}`)
+  for (const [n, b] of plan.entries()) {
+    const r = b >> 2, c = b & 3
+    cpu.keyDown(KEY_AT[r][c]); frames(3); cpu.keyUp(KEY_AT[r][c]); frames(20)
+    rows = flip(rows, r, c)
+    if (n < plan.length - 1) assert(board().join() === rows.join(), `after pressing row ${r} column ${c} the board is ${board()}, not ${rows}`)
+  }
+  assert(cpu.v[11] === swept + plan.length, `moves should be ${swept + plan.length}, is ${cpu.v[11]}`)
+  assert(on(cpu, 18, 8) || on(cpu, 19, 8) || on(cpu, 18, 9), "SOLVED should be on screen")
+})
+
 check("Guess the number takes one guess per press, hints, and stops on the right one", () => {
   const { bytes, error } = compile(readFileSync("games/guess.nib", "utf8"))
   assert(!error, error?.message)
