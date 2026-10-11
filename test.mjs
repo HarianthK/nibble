@@ -527,6 +527,29 @@ check("and, or, xor and shifts give the right byte, on any interpreter", () => {
   assert(tooFar && tooFar.line === 2 && /1 to 7/.test(tooFar.message), `a shift of 8 should be refused: ${tooFar && tooFar.message}`)
 })
 
+check("x *= n multiplies by any byte, wrapping like the machine, on any interpreter", () => {
+  // Every n, several x, both readings of the shift: the answer is always x * n mod 256.
+  for (let n = 0; n < 256; n++) {
+    for (const x of [0, 1, 3, 7, 100, 255]) {
+      const { bytes, error } = compile(`var x = ${x}\nx *= ${n}\nhalt`)
+      assert(!error, `n = ${n}: ${error && error.message}`)
+      for (const shift of [false, true]) {
+        const cpu = new Chip8()
+        cpu.quirks.shift = shift
+        cpu.load(bytes)
+        for (let i = 0; i < 200 && !cpu.halted; i++) cpu.step()
+        const want = (x * n) & 0xff
+        assert(cpu.v[0] === want, `${x} * ${n} gave ${cpu.v[0]}, not ${want} (shift quirk ${shift})`)
+      }
+    }
+  }
+  // A power of two is only shifts: three for 8, and no copy of x kept aside.
+  const eight = compile("var x = 1\nx *= 8\nhalt").bytes
+  assert(eight.length === 2 + 3 * 2 + 2, `x *= 8 should be the load, three shifts and the halt, got ${eight.length} bytes`)
+  const byVariable = compile("var x = 1\nvar y = 2\nx *= y\nhalt").error
+  assert(byVariable && byVariable.line === 3 && /needs a number/.test(byVariable.message), `x *= y should be refused: ${byVariable && byVariable.message}`)
+})
+
 check("x = y - x uses x before it is overwritten", () => {
   // Copying y into x first would leave x - x, always 0, and turn y + x into y + y.
   const cases = [

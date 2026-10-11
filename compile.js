@@ -60,7 +60,7 @@ function lex(source) {
     }
     // The two character operators have to be tried before the single ones, or
     // != would come out as ! followed by =.
-    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-&|^]=|[=!<>]=|[=+\-*!<>&|^])/g
+    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-*&|^]=|[=!<>]=|[=+\-*!<>&|^])/g
     let m
     while ((m = re.exec(stripped))) tokens.push({ text: m[1], line })
     tokens.push({ text: "\n", line })
@@ -596,7 +596,7 @@ export function compile(source) {
     }
 
     // A name on its own is a call. A name followed by an operator is not.
-    if (isName(word) && !["=", "+=", "-=", "&=", "|=", "^=", "<<=", ">>="].includes(tokens[at + 1]?.text)) {
+    if (isName(word) && !["=", "+=", "-=", "*=", "&=", "|=", "^=", "<<=", ">>="].includes(tokens[at + 1]?.text)) {
       const name = next()
       const slot = emit(0x2000)
       calls.push({ slot, name, line: ln })
@@ -622,6 +622,21 @@ export function compile(source) {
       if (op === "&=" || op === "|=" || op === "^=") {
         const from = operand(next(), ln)
         emit(0x8000 | (target << 8) | (from << 4) | BITWISE[op[0]])
+        return
+      }
+      if (op === "*=") {
+        // The machine has no multiply. Reading n's bits from the top, each one doubles x and
+        // a set bit adds the original back: x * 5 is ((x * 2) * 2) + x. It wraps as a byte does.
+        const t = next()
+        if (isName(t)) throw new Fault("*= needs a number, since the machine cannot multiply by a variable", ln)
+        const bits = number(t, ln).toString(2)
+        if (bits === "0") { emit(0x6000 | (target << 8)); return }
+        const rest = bits.slice(1)
+        if (rest.includes("1")) emit(0x8000 | (SCRATCH_A << 8) | (target << 4))
+        for (const bit of rest) {
+          emit(0x800e | (target << 8) | (target << 4))
+          if (bit === "1") emit(0x8004 | (target << 8) | (SCRATCH_A << 4))
+        }
         return
       }
       if (op === "<<=" || op === ">>=") {

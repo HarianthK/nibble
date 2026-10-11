@@ -224,3 +224,20 @@ and then computed x - x: always 0. `x = y + x` gave y + y. Now when the second
 term is the variable itself, it is done in place: addition and the bitwise
 operators do not care about order, and subtraction uses 8XY7, the machine's
 reversed subtract, which computes VY - VX directly.
+
+## Multiplying on a machine that cannot
+
+CHIP-8 has add, subtract and one-place shifts, and nothing else for arithmetic.
+`x *= n` is built from those the way it is done by hand in binary: read n's bits
+from the top, and for each one after the first, double x, then if the bit is
+set, add the original x back. x * 5 is 101 in binary, so it is x, doubled, doubled
+again, plus x: ((x * 2) * 2) + x. The original x is kept in a scratch register
+for the adding, and only when some bit after the first is set, so a power of two
+is pure shifts. Times 0 is a load of 0 and times 1 is nothing at all.
+
+The doubling is a shift of x by itself, as for `<<=`, so it gives the same answer
+whichever way an interpreter reads the shift. The check compiles every n from 0
+to 255 against six values of x and runs each under both shift quirks: 3,072 runs,
+each compared with x * n mod 256. A variable on the right is refused, since
+multiplying by one would mean a loop the program cannot see.
+
