@@ -245,21 +245,22 @@ export function compile(source) {
     const op = next()
     const rightTok = next()
 
-    if (op === "<" || op === ">") {
+    if (op === "<" || op === ">" || op === "<=" || op === ">=") {
       // Subtracting sets the flag to 1 when there was nothing to borrow, which
       // is to say when the first number was the larger. So a < b leaves it 0.
       const load = (which, tok) => {
         if (isName(tok)) emit(0x8000 | (which << 8) | (reg(tok, ln) << 4))
         else emit(0x6000 | (which << 8) | (number(tok, ln) & 0xff))
       }
-      if (op === "<") { load(SCRATCH_A, leftName); load(SCRATCH_B, rightTok) }
+      // a >= b is a < b the other way out: the same subtraction, skipping on a flag of 1.
+      if (op === "<" || op === ">=") { load(SCRATCH_A, leftName); load(SCRATCH_B, rightTok) }
       else { load(SCRATCH_A, rightTok); load(SCRATCH_B, leftName) }
       emit(0x8005 | (SCRATCH_A << 8) | (SCRATCH_B << 4))
-      emit(0x3f00)
+      emit(op === "<" || op === ">" ? 0x3f00 : 0x4f00)
       return
     }
 
-    if (op !== "==" && op !== "!=") throw new Fault(`${op} is not one of == != < >`, ln)
+    if (op !== "==" && op !== "!=") throw new Fault(`${op} is not one of == != < > <= >=`, ln)
     if (isName(rightTok)) {
       const right = reg(rightTok, ln)
       emit((op === "==" ? 0x5000 : 0x9000) | (left << 8) | (right << 4))

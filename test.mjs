@@ -201,6 +201,23 @@ check("less than and greater than pick the right side", () => {
   assert(took(both(5, 5, ">")) === "else", "5 > 5 should be false")
 })
 
+check("<= and >= agree with the arithmetic, against variables and numbers, in both kinds of if", () => {
+  const truth = { "<": (a, b) => a < b, ">": (a, b) => a > b, "<=": (a, b) => a <= b, ">=": (a, b) => a >= b }
+  for (const op of ["<", ">", "<=", ">="]) {
+    for (const [a, b] of [[3, 9], [9, 3], [5, 5], [0, 0], [0, 255], [255, 0], [255, 255]]) {
+      const want = truth[op](a, b)
+      // An if with an else, against a variable; a one-line if, whose skip is flipped, against a number.
+      const withElse = run(`sprite dot [ 0x80 ]\nvar p = ${a}\nvar q = ${b}\nif p ${op} q { draw dot at 1, 1 } else { draw dot at 3, 3 }\nhalt`)
+      assert(on(withElse, 1, 1) === want && on(withElse, 3, 3) === !want, `${a} ${op} ${b} took the wrong branch`)
+      const oneLine = run(`sprite dot [ 0x80 ]\nvar p = ${a}\nif p ${op} ${b} { draw dot at 1, 1 }\nhalt`)
+      assert(on(oneLine, 1, 1) === want, `one-line if ${a} ${op} ${b} should be ${want}`)
+    }
+  }
+  // A loop that counts while i <= 5 runs six times, 0 to 5 inclusive.
+  const loop = run(`var i = 0\nvar n = 0\nwhile i <= 5 { n += 1\ni += 1 }\nhalt`)
+  assert(loop.v[1] === 6, `while i <= 5 ran ${loop.v[1]} times, not 6`)
+})
+
 check("comparing against a plain number works too", () => {
   const cpu = run(`
     sprite dot [ 0x80 ]

@@ -110,6 +110,8 @@ if x == 5 and y == 6 { ... }
 if x != y { ... }
 if x < 10 { ... }
 if x > y { ... }
+if x >= 10 { ... }
+if x <= y { ... }
 if key(A) { ... }
 if !key(D) { ... }
 if hit { ... }
