@@ -54,6 +54,8 @@ x = y | 0x80
 x ^= mask
 x >>= 2
 x *= 5
+x /= 3
+x %= 10
 ```
 
 `&`, `|` and `^` are the machine's own AND, OR and XOR, one instruction each
@@ -66,7 +68,9 @@ on AND, OR and XOR.
 The machine cannot multiply, so `x *= 5` is built from doubling and adding:
 about two instructions per bit of the number, which has to be a number, not a
 variable. A power of two is only shifts, so `x *= 8` costs three instructions.
-Like everything else it wraps at 256.
+Like everything else it wraps at 256. Dividing is missing too, so `x /= 3`
+and `x %= 10` take the number away until it would go below zero, counting; a
+power of two is a shift or a mask instead, so `x /= 4` costs two instructions.
 
 **Constants** name a number. They cost nothing, since the number is put
 wherever the name is used, and they cannot be changed or used as a variable.

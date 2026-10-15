@@ -567,6 +567,33 @@ check("x *= n multiplies by any byte, wrapping like the machine, on any interpre
   assert(byVariable && byVariable.line === 3 && /needs a number/.test(byVariable.message), `x *= y should be refused: ${byVariable && byVariable.message}`)
 })
 
+check("x /= n and x %= n divide by any byte, on any interpreter", () => {
+  // Every n, several x, both readings of the shift, checked against JavaScript's own division.
+  for (const op of ["/=", "%="]) {
+    for (let n = 1; n < 256; n++) {
+      for (const x of [0, 1, 7, 100, 200, 255]) {
+        const { bytes, error } = compile(`var x = ${x}\nx ${op} ${n}\nhalt`)
+        assert(!error, `x ${op} ${n}: ${error && error.message}`)
+        for (const shift of [false, true]) {
+          const cpu = new Chip8()
+          cpu.quirks.shift = shift
+          cpu.load(bytes)
+          for (let i = 0; i < 3000 && !cpu.halted; i++) cpu.step()
+          const want = op === "/=" ? Math.floor(x / n) : x % n
+          assert(cpu.halted && cpu.v[0] === want, `${x} ${op} ${n} gave ${cpu.v[0]}, not ${want} (shift quirk ${shift})`)
+        }
+      }
+    }
+  }
+  // A power of two needs no loop: two shifts for / 4, a mask for % 8.
+  assert(compile("var x = 9\nx /= 4\nhalt").bytes.length === 2 + 2 * 2 + 2, "x /= 4 should be two shifts")
+  assert(compile("var x = 9\nx %= 8\nhalt").bytes.length === 2 + 2 * 2 + 2, "x %= 8 should be a load and an and")
+  const zero = compile("var x = 9\nx /= 0\nhalt").error
+  assert(zero && zero.line === 2 && /zero/.test(zero.message), `x /= 0 should be refused: ${zero && zero.message}`)
+  const byVariable = compile("var x = 9\nvar y = 2\nx %= y\nhalt").error
+  assert(byVariable && /needs a number/.test(byVariable.message), `x %= y should be refused: ${byVariable && byVariable.message}`)
+})
+
 check("x = y - x uses x before it is overwritten", () => {
   // Copying y into x first would leave x - x, always 0, and turn y + x into y + y.
   const cases = [

@@ -60,7 +60,7 @@ function lex(source) {
     }
     // The two character operators have to be tried before the single ones, or
     // != would come out as ! followed by =.
-    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-*&|^]=|[=!<>]=|[=+\-*!<>&|^])/g
+    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-*/%&|^]=|[=!<>]=|[=+\-*!<>&|^])/g
     let m
     while ((m = re.exec(stripped))) tokens.push({ text: m[1], line })
     tokens.push({ text: "\n", line })
@@ -597,7 +597,7 @@ export function compile(source) {
     }
 
     // A name on its own is a call. A name followed by an operator is not.
-    if (isName(word) && !["=", "+=", "-=", "*=", "&=", "|=", "^=", "<<=", ">>="].includes(tokens[at + 1]?.text)) {
+    if (isName(word) && !["=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="].includes(tokens[at + 1]?.text)) {
       const name = next()
       const slot = emit(0x2000)
       calls.push({ slot, name, line: ln })
@@ -638,6 +638,32 @@ export function compile(source) {
           emit(0x800e | (target << 8) | (target << 4))
           if (bit === "1") emit(0x8004 | (target << 8) | (SCRATCH_A << 4))
         }
+        return
+      }
+      if (op === "/=" || op === "%=") {
+        const t = next()
+        if (isName(t)) throw new Fault(`${op} needs a number, since the machine cannot divide by a variable`, ln)
+        const n = number(t, ln)
+        if (n === 0) throw new Fault("dividing by zero", ln)
+        if ((n & (n - 1)) === 0) {
+          // A power of two: dividing is shifting right, and the remainder is the low bits.
+          if (op === "/=") for (let s = n; s > 1; s >>= 1) emit(0x8006 | (target << 8) | (target << 4))
+          else { emit(0x6000 | (SCRATCH_A << 8) | (n - 1)); emit(0x8002 | (target << 8) | (SCRATCH_A << 4)) }
+          return
+        }
+        // No divide either: take n away until it would go below zero, counting in a scratch
+        // register, then put the last one back. What is left is the remainder; the count, the quotient.
+        emit(0x6000 | (SCRATCH_B << 8))
+        emit(0x6000 | (SCRATCH_A << 8) | n)
+        const top = here()
+        emit(0x8005 | (target << 8) | (SCRATCH_A << 4))
+        emit(0x4f00)
+        const toUndo = emit(0x1000)
+        emit(0x7001 | (SCRATCH_B << 8))
+        emit(0x1000 | top)
+        code[toUndo] = 0x1000 | here()
+        emit(0x8004 | (target << 8) | (SCRATCH_A << 4))
+        if (op === "/=") emit(0x8000 | (target << 8) | (SCRATCH_B << 4))
         return
       }
       if (op === "<<=" || op === ">>=") {

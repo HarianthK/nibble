@@ -241,3 +241,21 @@ to 255 against six values of x and runs each under both shift quirks: 3,072 runs
 each compared with x * n mod 256. A variable on the right is refused, since
 multiplying by one would mean a loop the program cannot see.
 
+## Dividing by taking away
+
+There is no divide either, and Breakout already did it by hand: to find which
+brick the ball is under, it subtracted the brick width until it could not. `x /= n`
+and `x %= n` now do that themselves. n goes in one scratch register and a count
+in the other; each pass subtracts n from x, and the borrow flag says whether x
+went below zero. When it does, the last subtraction is added back, leaving the
+remainder in x, and for `/=` the count is copied in. Each pass is four
+instructions run, so the slowest case, 255 divided by 3, is 85 passes and about
+350 instructions; dividing by 1 never loops, since 1 is a power of two.
+
+A power of two skips the loop: dividing is shifting right, by x itself as for
+`>>=` so both readings of the shift agree, and the remainder is x and n - 1. The
+check compiles every n from 1 to 255 against six values of x for both operators
+and runs each under both shift quirks, 6,120 runs, comparing with JavaScript's
+own division. Leaving the last subtraction in, leaving the loop on the wrong
+flag, and an off-by-one mask each make it fail.
+
