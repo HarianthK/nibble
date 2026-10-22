@@ -111,6 +111,7 @@ touched.
 if x == 5 { ... } else { ... }
 if x == 5 { ... } else if x == 6 { ... } else { ... }
 if x == 5 and y == 6 { ... }
+if x == 0 or x == 63 { ... }
 if x != y { ... }
 if x < 10 { ... }
 if x > y { ... }
@@ -124,7 +125,8 @@ if hit { ... }
 `hit` is true when the sprite you just drew turned off a pixel that was already
 lit, which is the only collision test the machine has. Check it straight after
 a `draw`. `and` joins conditions: the body runs only when all of them hold, and
-the first one that fails is where the machine leaves.
+the first one that fails is where the machine leaves. `or` runs the body as soon as one
+holds. One condition uses `and` or `or`, not both.
 
 **Loops** run forever, until a condition fails, or once for each number in a
 range, ends included. The counter is one of your variables, the start can be a

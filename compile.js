@@ -488,13 +488,24 @@ export function compile(source) {
 
     // a and b and c: every part gets its own skip and jump out, so the first
     // part that fails leaves. Returns the jumps to patch once the end is known.
+    // and: each condition that fails jumps out. or: each but the last has its skip flipped and
+    // jumps into the body when it holds. A condition joins with one or the other, not both.
     const conditions = () => {
-      const outs = []
-      do {
-        if (outs.length) next()
+      const outs = [], toBody = []
+      let joiner = null
+      for (;;) {
         condition()
-        outs.push(emit(0x1000))
-      } while (peek() === "and")
+        const more = peek() === "and" || peek() === "or"
+        if (more && joiner && peek() !== joiner) throw new Fault("a condition can join with and or with or, not both", line())
+        if (more && peek() === "or") {
+          code[code.length - 1] = flipSkip(code[code.length - 1])
+          toBody.push(emit(0x1000))
+        } else outs.push(emit(0x1000))
+        if (!more) break
+        joiner = next()
+      }
+      for (const j of toBody) code[j] = 0x1000 | here()
+      outs.toBody = toBody.length
       return outs
     }
 
@@ -546,7 +557,7 @@ export function compile(source) {
         if (peek() === "if") statement()
         else block()
         code[jumpPastElse] = 0x1000 | here()
-      } else if (outs.length === 1 && code.length === jumpOver + 2 && (code[jumpOver + 1] & 0xf000) !== 0x1000) {
+      } else if (outs.length === 1 && !outs.toBody && code.length === jumpOver + 2 && (code[jumpOver + 1] & 0xf000) !== 0x1000) {
         // A one-word body needs no jump: flip the skip and put the body
         // where the jump was. See DOCS.md for why jumps are left alone.
         code[jumpOver - 1] = flipSkip(code[jumpOver - 1])

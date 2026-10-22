@@ -201,6 +201,24 @@ check("less than and greater than pick the right side", () => {
   assert(took(both(5, 5, ">")) === "else", "5 > 5 should be false")
 })
 
+check("or runs the body when any condition holds, in every kind of if and in while", () => {
+  for (const [a, b] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    const want = a === 1 || b === 1
+    const withElse = run(`sprite dot [ 0x80 ]\nvar p = ${a}\nvar q = ${b}\nif p == 1 or q == 1 { draw dot at 1, 1 } else { draw dot at 3, 3 }\nhalt`)
+    assert(on(withElse, 1, 1) === want && on(withElse, 3, 3) === !want, `${a} or ${b} took the wrong branch`)
+    const oneLine = run(`sprite dot [ 0x80 ]\nvar p = ${a}\nvar q = ${b}\nif p == 1 or q > 0 { draw dot at 1, 1 }\nhalt`)
+    assert(on(oneLine, 1, 1) === want, `one-line ${a} or ${b} should be ${want}`)
+  }
+  // Three in a row: only the middle one holds, so only the middle one can get the body run.
+  const three = run(`sprite dot [ 0x80 ]\nvar x = 5\nif x == 1 or x >= 4 or x == 9 { draw dot at 2, 2 }\nhalt`)
+  assert(on(three, 2, 2), "the middle of three conditions held, but the body did not run")
+  // while x != 0 or y != 0 counts both down to zero.
+  const loop = run(`var x = 3\nvar y = 5\nvar n = 0\nwhile x != 0 or y != 0 {\nif x != 0 { x -= 1 }\nif y != 0 { y -= 1 }\nn += 1\n}\nhalt`)
+  assert(loop.v[2] === 5, `while ... or ... ran ${loop.v[2]} times, not 5`)
+  const mixed = compile("var x = 1\nif x == 1 and x == 2 or x == 3 { halt }\nhalt").error
+  assert(mixed && /not both/.test(mixed.message), `mixing and with or should be refused: ${mixed && mixed.message}`)
+})
+
 check("<= and >= agree with the arithmetic, against variables and numbers, in both kinds of if", () => {
   const truth = { "<": (a, b) => a < b, ">": (a, b) => a > b, "<=": (a, b) => a <= b, ">=": (a, b) => a >= b }
   for (const op of ["<", ">", "<=", ">="]) {
