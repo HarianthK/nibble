@@ -139,7 +139,8 @@ for x = 2 to 9 { draw dot at x, 3 }
 loop { if key(E) { break } }
 ```
 
-`break` leaves the loop it is written in, and only that one.
+`break` leaves the loop it is written in, and only that one. `continue` skips the rest
+of the round and starts the next one; in a `for`, the count still goes up first.
 
 **Routines** let you name a piece of code and use it more than once. Call one by
 writing its name on a line of its own. A routine can be called before it appears

@@ -91,6 +91,7 @@ export function compile(source) {
   const routines = new Map()
   const calls = []
   const breaks = [] // one list of jump slots per loop currently open
+  const continues = [] // the same, for continue, patched to where the next round starts
   // One tick of the delay timer, which the machine counts down at 60Hz.
   const emitWait = () => {
     emit(0x6000 | (SCRATCH_A << 8) | 1)
@@ -462,13 +463,15 @@ export function compile(source) {
       return
     }
 
-    // break inside a loop leaves it. Each open loop collects its own breaks.
+    // break inside a loop leaves it, continue starts its next round. Each open loop collects its own.
     const loopBody = () => {
       breaks.push([])
+      continues.push([])
       block()
-      return breaks.pop()
+      return [breaks.pop(), continues.pop()]
     }
-    const closeLoop = (outs) => { for (const o of outs) code[o] = 0x1000 | here() }
+    const jumpTo = (slots, spot) => { for (const o of slots) code[o] = 0x1000 | spot }
+    const closeLoop = (outs) => jumpTo(outs, here())
 
     if (word === "break") {
       next()
@@ -477,10 +480,18 @@ export function compile(source) {
       return
     }
 
+    if (word === "continue") {
+      next()
+      if (!continues.length) throw new Fault("continue is only for inside a loop", ln)
+      continues[continues.length - 1].push(emit(0x1000))
+      return
+    }
+
     if (word === "loop") {
       next()
       const top = here()
-      const outs = loopBody()
+      const [outs, again] = loopBody()
+      jumpTo(again, top)
       emit(0x1000 | top)
       closeLoop(outs)
       return
@@ -513,7 +524,8 @@ export function compile(source) {
       next()
       const top = here()
       const outs = conditions()
-      const broken = loopBody()
+      const [broken, again] = loopBody()
+      jumpTo(again, top)
       emit(0x1000 | top)
       closeLoop([...outs, ...broken])
       return
@@ -536,7 +548,8 @@ export function compile(source) {
       const top = here()
       emit(0x4000 | (target << 8) | (last + 1))
       const jumpOut = emit(0x1000)
-      const broken = loopBody()
+      const [broken, again] = loopBody()
+      jumpTo(again, here()) // the count still goes up
       emit(0x7000 | (target << 8) | 1)
       emit(0x1000 | top)
       closeLoop([jumpOut, ...broken])

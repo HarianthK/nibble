@@ -999,6 +999,30 @@ check("break leaves the loop it is in, and only that one", () => {
   assert(error && /inside a loop/.test(error.message), "break outside a loop should be refused")
 })
 
+check("continue skips the rest of a round, and a for loop still counts", () => {
+  // Draws a dot at x = 1, 2, 4, 5 on row 0; 3 is skipped. Then y counts the rounds of a while.
+  const source = [
+    "var x = 0", "var y = 0", "var n = 0",
+    "sprite dot [ 0x80 ]",
+    "for x = 1 to 5 {",
+    "  if x == 3 { continue }",
+    "  draw dot at x, y",
+    "}",
+    "while n != 4 {",
+    "  n = n + 1",
+    "  if n == 2 { continue }",
+    "  draw dot at n, 9",
+    "}",
+    "halt", "",
+  ].join("\n")
+  const cpu = run(source, { frames: 10 })
+  assert(cpu.halted, "the program should have halted")
+  for (const [x, y, lit] of [[1, 0, 1], [2, 0, 1], [3, 0, 0], [4, 0, 1], [5, 0, 1], [1, 9, 1], [2, 9, 0], [3, 9, 1], [4, 9, 1]])
+    assert(!!on(cpu, x, y) === !!lit, `the dot at ${x}, ${y} should be ${lit ? "on" : "off"}`)
+  const { error } = compile("var x = 0\ncontinue\n")
+  assert(error && /inside a loop/.test(error.message), "continue outside a loop should be refused")
+})
+
 check("Lights Out flips the right lights for every key and can be solved", () => {
   const { bytes, error } = compile(readFileSync("games/lights.nib", "utf8"))
   assert(!error, error?.message)
