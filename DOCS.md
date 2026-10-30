@@ -238,8 +238,9 @@ is pure shifts. Times 0 is a load of 0 and times 1 is nothing at all.
 The doubling is a shift of x by itself, as for `<<=`, so it gives the same answer
 whichever way an interpreter reads the shift. The check compiles every n from 0
 to 255 against six values of x and runs each under both shift quirks: 3,072 runs,
-each compared with x * n mod 256. A variable on the right is refused, since
-multiplying by one would mean a loop the program cannot see.
+each compared with x * n mod 256. A variable on the right was refused at
+first, since multiplying by one means a loop; the section on variables below is
+how it works now.
 
 ## Dividing by taking away
 
@@ -259,3 +260,34 @@ and runs each under both shift quirks, 6,120 runs, comparing with JavaScript's
 own division. Leaving the last subtraction in, leaving the loop on the wrong
 flag, and an off-by-one mask each make it fail.
 
+## Multiplying and dividing by a variable
+
+`x *= y` cannot be unrolled at compile time, since nobody knows y yet. The
+loop does the same thing from the other end: copy x and y into the two scratch
+registers, set x to 0, then halve the copy of y each round. The bit that falls
+out lands in the flag; when it is 1, the copy of x is added in. Then that copy
+doubles. When the copy of y reaches 0 the loop ends, so it runs once per bit of
+y, eight times at most. Both copies are taken before x is cleared, which is why
+`x *= x` squares rather than giving 0.
+
+Dividing by a variable is long division in binary, the way it is done on paper.
+One scratch register is the remainder so far and the other counts eight rounds.
+Each round doubles the remainder, shifts x left, and adds the bit that fell off
+x into the remainder: the flag is the bit, and adding the flag register is the
+whole move. Then y comes off the remainder. If that did not borrow, the
+quotient bit is 1, and it goes into the low bit of x, which the shift has just
+emptied, so x turns from the number being divided into the answer one bit at a
+time. If it borrowed, y goes back on. The first version had a separate path for
+a y of 128 or more, out of fear that doubling the remainder would overflow.
+Breaking that path changed nothing, and the reason is that the remainder before
+a round holds at most the bits of x read so far, so it is under 128 until the
+last round. The path was deleted.
+
+Every pair of x and y is checked, all 65,536 of them for each of the three
+operators, under both readings of the shift and with the flag written last as
+some interpreters do: 393,216 runs against JavaScript's own arithmetic. The
+slowest takes 87 instructions, where dividing by a number takes up to 350.
+Dividing by 0 cannot be refused when the 0 is in a variable, so it does what
+the long division does with nothing to take away: the quotient is 255 and the
+remainder is x. `x /= x` and `x %= x` are compiled as 1 (255 for 0) and 0.
+Eleven breakages, and every one fails the check.

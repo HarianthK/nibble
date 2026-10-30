@@ -200,6 +200,53 @@ export function compile(source) {
     return n
   }
 
+  // x *= y at run time: halve a copy of y each round, adding the doubling copy of x
+  // whenever a 1 falls out. Both copies are taken first, so x *= x works too.
+  const multiplyBy = (x, y) => {
+    const [a, b] = [SCRATCH_A, SCRATCH_B]
+    emit(0x8000 | (a << 8) | (x << 4))
+    emit(0x8000 | (b << 8) | (y << 4))
+    emit(0x6000 | (x << 8))
+    const top = here()
+    emit(0x4000 | (b << 8))
+    const out = emit(0x1000)
+    emit(0x8006 | (b << 8) | (b << 4))
+    emit(0x3f00)
+    emit(0x8004 | (x << 8) | (a << 4))
+    emit(0x800e | (a << 8) | (a << 4))
+    emit(0x1000 | top)
+    code[out] = 0x1000 | here()
+  }
+
+  // x /= y and x %= y at run time, by long division: eight rounds, one quotient bit each.
+  // DOCS.md has the walk-through, and why doubling the remainder never overflows.
+  const divideBy = (x, y, remainder) => {
+    const [a, b] = [SCRATCH_A, SCRATCH_B]
+    if (x === y) {
+      // x / x is 1, or 255 for 0 as any division by 0 gives; x % x is always 0.
+      if (remainder) { emit(0x6000 | (x << 8)); return }
+      emit(0x3000 | (x << 8)); emit(0x6002 | (x << 8)); emit(0x70ff | (x << 8))
+      return
+    }
+    // a is the remainder so far and b counts the rounds. Each round moves x's top bit into
+    // a, and when a holds at least y, takes y off and writes a 1 into the bit x just freed.
+    emit(0x6000 | (a << 8))
+    emit(0x6008 | (b << 8))
+    const top = here()
+    emit(0x800e | (a << 8) | (a << 4))
+    emit(0x800e | (x << 8) | (x << 4))
+    emit(0x80f4 | (a << 8))
+    emit(0x8005 | (a << 8) | (y << 4))
+    emit(0x3f00)
+    emit(0x7001 | (x << 8))
+    emit(0x3f01)
+    emit(0x8004 | (a << 8) | (y << 4))
+    emit(0x70ff | (b << 8))
+    emit(0x3000 | (b << 8))
+    emit(0x1000 | top)
+    if (remainder) emit(0x8000 | (x << 8) | (a << 4))
+  }
+
   // AND, OR and XOR only work between registers, so a number goes through a scratch one first.
   const BITWISE = { "&": 2, "|": 1, "^": 3 }
   const isBitwise = (t) => t === "&" || t === "|" || t === "^"
@@ -653,7 +700,7 @@ export function compile(source) {
         // The machine has no multiply. Reading n's bits from the top, each one doubles x and
         // a set bit adds the original back: x * 5 is ((x * 2) * 2) + x. It wraps as a byte does.
         const t = next()
-        if (isName(t)) throw new Fault("*= needs a number, since the machine cannot multiply by a variable", ln)
+        if (isName(t)) { multiplyBy(target, reg(t, ln)); return }
         const bits = number(t, ln).toString(2)
         if (bits === "0") { emit(0x6000 | (target << 8)); return }
         const rest = bits.slice(1)
@@ -666,7 +713,7 @@ export function compile(source) {
       }
       if (op === "/=" || op === "%=") {
         const t = next()
-        if (isName(t)) throw new Fault(`${op} needs a number, since the machine cannot divide by a variable`, ln)
+        if (isName(t)) { divideBy(target, reg(t, ln), op === "%="); return }
         const n = number(t, ln)
         if (n === 0) throw new Fault("dividing by zero", ln)
         if ((n & (n - 1)) === 0) {

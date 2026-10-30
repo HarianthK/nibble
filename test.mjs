@@ -581,8 +581,6 @@ check("x *= n multiplies by any byte, wrapping like the machine, on any interpre
   // A power of two is only shifts: three for 8, and no copy of x kept aside.
   const eight = compile("var x = 1\nx *= 8\nhalt").bytes
   assert(eight.length === 2 + 3 * 2 + 2, `x *= 8 should be the load, three shifts and the halt, got ${eight.length} bytes`)
-  const byVariable = compile("var x = 1\nvar y = 2\nx *= y\nhalt").error
-  assert(byVariable && byVariable.line === 3 && /needs a number/.test(byVariable.message), `x *= y should be refused: ${byVariable && byVariable.message}`)
 })
 
 check("x /= n and x %= n divide by any byte, on any interpreter", () => {
@@ -608,8 +606,49 @@ check("x /= n and x %= n divide by any byte, on any interpreter", () => {
   assert(compile("var x = 9\nx %= 8\nhalt").bytes.length === 2 + 2 * 2 + 2, "x %= 8 should be a load and an and")
   const zero = compile("var x = 9\nx /= 0\nhalt").error
   assert(zero && zero.line === 2 && /zero/.test(zero.message), `x /= 0 should be refused: ${zero && zero.message}`)
-  const byVariable = compile("var x = 9\nvar y = 2\nx %= y\nhalt").error
-  assert(byVariable && /needs a number/.test(byVariable.message), `x %= y should be refused: ${byVariable && byVariable.message}`)
+})
+
+check("x *= y, x /= y and x %= y work out every pair of bytes at run time", () => {
+  // Each program is compiled once; the registers are set by hand and the two loads skipped.
+  // Both shift readings, and the flag written last, as some interpreters do.
+  const quirkSets = [{}, { shift: true, vfOrder: true }]
+  const expected = {
+    "*=": (x, y) => (x * y) & 0xff,
+    "/=": (x, y) => (y === 0 ? 255 : Math.floor(x / y)),
+    "%=": (x, y) => (y === 0 ? x : x % y),
+  }
+  let most = 0
+  for (const op of Object.keys(expected)) {
+    const { bytes, error } = compile(`var x = 0\nvar y = 0\nx ${op} y\nhalt`)
+    assert(!error, `x ${op} y: ${error && error.message}`)
+    for (let x = 0; x < 256; x++) {
+      for (let y = 0; y < 256; y++) {
+        for (const quirks of quirkSets) {
+          const cpu = new Chip8()
+          Object.assign(cpu.quirks, quirks)
+          cpu.load(bytes)
+          cpu.v[0] = x
+          cpu.v[1] = y
+          cpu.pc += 4
+          let steps = 0
+          while (steps < 1000 && !cpu.halted) { cpu.step(); steps++ }
+          most = Math.max(most, steps)
+          const want = expected[op](x, y)
+          assert(cpu.halted && cpu.v[0] === want, `${x} ${op} ${y} gave ${cpu.v[0]}, not ${want} (${JSON.stringify(quirks)})`)
+          assert(cpu.v[1] === y, `${x} ${op} ${y} changed y to ${cpu.v[1]}`)
+        }
+      }
+    }
+  }
+  // Eight rounds at most, so a divide costs about the same whatever the numbers are.
+  assert(most < 100, `the slowest case took ${most} steps`)
+  // The same variable on both sides: x *= x squares, x /= x is 1, x %= x is 0.
+  for (const x of [0, 1, 2, 15, 16, 200, 255]) {
+    for (const [op, want] of [["*=", (x * x) & 0xff], ["/=", x === 0 ? 255 : 1], ["%=", 0]]) {
+      const cpu = run(`var x = ${x}\nx ${op} x\nhalt`, { frames: 4 })
+      assert(cpu.v[0] === want, `${x} ${op} itself gave ${cpu.v[0]}, not ${want}`)
+    }
+  }
 })
 
 check("x = y - x uses x before it is overwritten", () => {
