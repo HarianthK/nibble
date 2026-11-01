@@ -308,8 +308,8 @@ out is skipped when the flag is 1, which is the same trick `<=` uses in an
 and an end the body changes (it is read every time). An end of 255 is the
 one case the test cannot stop, since every byte is at most 255, so after the
 count goes up the loop also leaves when the counter has wrapped to 0. It
-costs six words against the number form's two, so a number end still gets
-the short form.
+takes seven instructions against the number form's four, so a number end
+still gets the short form.
 
 The counter as its own end, `for x = 0 to x`, would always pass the test and
 stop only by wrapping, so it is refused. The checks count rounds in a
