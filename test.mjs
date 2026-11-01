@@ -453,11 +453,50 @@ check("a for loop can start from a variable, and leaves the counter past the end
   assert(litCount(cpu) === 3, `expected 3 pixels, found ${litCount(cpu)}`)
 })
 
-check("a for loop refuses a variable as its end, and says so with the line", () => {
+check("a for loop can end at a variable, read each round", () => {
+  const cpu = run(`
+    sprite dot [ 0x80 ]
+    var x = 0
+    var n = 6
+    var c = 0
+    for x = 3 to n { draw dot at x, 0 }
+    draw dot at x, 5
+    halt
+  `)
+  for (let x = 3; x <= 6; x++) assert(on(cpu, x, 0), `nothing drawn at column ${x}`)
+  assert(on(cpu, 7, 5), "the counter should be one past the end when the loop is done")
+  assert(litCount(cpu) === 5, `expected 5 pixels, found ${litCount(cpu)}`)
+  // Rounds counted in c: a start past the end runs none, the end can move, and 255 ends.
+  const rounds = (src) => { const cpu = run(`var x = 0
+var n = 0
+var c = 0
+${src}
+halt`, { frames: 200 }); return [cpu.v[2], cpu.v[0]] }
+  const same = (a, b) => a[0] === b[0] && a[1] === b[1]
+  assert(same(rounds(`n = 4
+for x = 5 to n { c += 1 }`), [0, 5]), `a start past the end ran: ${rounds(`n = 4
+for x = 5 to n { c += 1 }`)}`)
+  assert(same(rounds(`n = 10
+for x = 0 to n { c += 1
+n = 3 }`), [4, 4]), "the end was not read again each round")
+  assert(same(rounds(`n = 255
+for x = 250 to n { c += 1 }`), [6, 0]), `an end of 255 gave ${rounds(`n = 255
+for x = 250 to n { c += 1 }`)}`)
+  assert(same(rounds(`n = 0
+for x = 0 to n { c += 1 }`), [1, 1]), "an end of 0 should run once")
+  assert(same(rounds(`n = 9
+for x = 0 to n { if x == 5 { break }
+c += 1 }`), [5, 5]), "break did not leave")
+  assert(same(rounds(`n = 9
+for x = 0 to n { if x < 8 { continue }
+c += 1 }`), [2, 10]), "continue did not count on")
+})
+
+check("a for loop's end cannot be its own counter, and says so with the line", () => {
   const { error } = compile(`var a = 1
 var b = 4
-for a = 0 to b { }`)
-  assert(error && error.line === 3 && /number after to/.test(error.message), `got ${error && error.message}`)
+for a = 0 to a { }`)
+  assert(error && error.line === 3 && /own counter/.test(error.message), `got ${error && error.message}`)
 })
 
 check("else if chains pick exactly one branch", () => {

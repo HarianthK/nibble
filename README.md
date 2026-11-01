@@ -135,7 +135,9 @@ holds. One condition uses `and` or `or`, not both.
 
 **Loops** run forever, until a condition fails, or once for each number in a
 range, ends included. The counter is one of your variables, the start can be a
-number or another variable, and the end has to be a number.
+number or another variable, and so can the end. A variable end is read again
+each round, so a body that moves it changes how far the loop goes, and a start
+past the end runs nothing.
 
 ```
 loop { ... }

@@ -291,3 +291,31 @@ Dividing by 0 cannot be refused when the 0 is in a variable, so it does what
 the long division does with nothing to take away: the quotient is 255 and the
 remainder is x. `x /= x` and `x %= x` are compiled as 1 (255 for 0) and 0.
 Eleven breakages, and every one fails the check.
+
+## Counting to a variable
+
+A `for` with a number at the end compiles to one test at the top: skip the
+jump out while the counter is not one more than the end. That only works
+because the end is known, and it is why an end of 255 was refused: one more
+than 255 is 0, which is where a counter starting at 0 begins.
+
+A variable end cannot be added to before the test, so the loop asks the
+real question each round: is the end minus the counter free of a borrow?
+`8XY5` sets the flag to 1 exactly when there was nothing to borrow, so the
+end is copied to a scratch register, the counter taken from it, and the jump
+out is skipped when the flag is 1, which is the same trick `<=` uses in an
+`if`. That handles a start past the end (the first test fails, nothing runs)
+and an end the body changes (it is read every time). An end of 255 is the
+one case the test cannot stop, since every byte is at most 255, so after the
+count goes up the loop also leaves when the counter has wrapped to 0. It
+costs six words against the number form's two, so a number end still gets
+the short form.
+
+The counter as its own end, `for x = 0 to x`, would always pass the test and
+stop only by wrapping, so it is refused. The checks count rounds in a
+variable: four columns drawn for 3 to 6 and the counter left at 7; none for
+5 to 4; four when the body moves the end from 10 to 3; six for 250 to 255,
+with the counter at 0; one for 0 to 0; and `break` and `continue` inside.
+Six breakages fail them: the skip inverted, the subtraction the wrong way
+round, no exit on wrapping, `continue` jumping past the count, the end read
+once before the loop, and the counter allowed as its own end.

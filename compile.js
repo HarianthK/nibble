@@ -579,8 +579,8 @@ export function compile(source) {
     }
 
     if (word === "for") {
-      // for x = a to b { ... } runs the body with x at a, a+1 ... b. The end
-      // has to be a number, since the test is against one more than it.
+      // for x = a to b { ... } runs the body with x at a, a+1 ... b. A number end is
+      // tested against one more than it, which is the cheapest test; a variable end below.
       next()
       const target = reg(next(), ln)
       eat("=")
@@ -589,7 +589,24 @@ export function compile(source) {
       else emit(0x6000 | (target << 8) | (number(first, ln) & 0xff))
       eat("to")
       const lastTok = next()
-      if (isName(lastTok)) throw new Fault("for needs a number after to, not a variable", ln)
+      if (isName(lastTok)) {
+        // A variable end is read each round: run while x <= end, which a start past the end never
+        // is, and leave when x wraps to 0, since every byte is <= 255.
+        const end = reg(lastTok, ln)
+        if (end === target) throw new Fault("the end of a for cannot be its own counter", ln)
+        const top = here()
+        emit(0x8000 | (SCRATCH_A << 8) | (end << 4))
+        emit(0x8005 | (SCRATCH_A << 8) | (target << 4))
+        emit(0x3f01)
+        const jumpOut = emit(0x1000)
+        const [broken, again] = loopBody()
+        jumpTo(again, here())
+        emit(0x7001 | (target << 8))
+        emit(0x3000 | (target << 8))
+        emit(0x1000 | top)
+        closeLoop([jumpOut, ...broken])
+        return
+      }
       const last = number(lastTok, ln)
       if (last > 254) throw new Fault("for can count up to 254 at most", ln)
       const top = here()
