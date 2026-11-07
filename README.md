@@ -131,7 +131,9 @@ if hit { ... }
 lit, which is the only collision test the machine has. Check it straight after
 a `draw`. `and` joins conditions: the body runs only when all of them hold, and
 the first one that fails is where the machine leaves. `or` runs the body as soon as one
-holds. One condition uses `and` or `or`, not both.
+holds. Both can be used in one condition, and `and` binds tighter, as in most
+languages: `x == 0 and y == 0 or lives == 0` means
+`(x == 0 and y == 0) or lives == 0`. There are no brackets.
 
 **Loops** run forever, until a condition fails, or once for each number in a
 range, ends included. The counter is one of your variables, the start can be a

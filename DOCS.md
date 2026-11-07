@@ -319,3 +319,32 @@ with the counter at 0; one for 0 to 0; and `break` and `continue` inside.
 Six breakages fail them: the skip inverted, the subtraction the wrong way
 round, no exit on wrapping, `continue` jumping past the count, the end read
 once before the loop, and the counter allowed as its own end.
+
+## `and` and `or` together
+
+A condition is groups of `and` joined by `or`, so `and` binds tighter, the
+way it does in C, Python and JavaScript. The machine has no way to combine
+truth values, only to skip the next instruction, so the grouping is all in
+where the jumps go:
+
+- Inside a group, each part is its usual skip followed by a jump that runs
+  when the part fails. In the last group, that jump leaves the condition, as
+  it always did for `and`. In any earlier group, it goes to the start of the
+  next group instead, because the next group can still make the whole thing
+  true.
+- When a group isn't the last, its final skip is flipped, the same flip `or`
+  already used, so that the jump after it runs when the part holds and goes
+  straight into the body.
+
+`a and b or c` is therefore: test a, failing to c; test b, holding into the
+body and failing to c; test c, failing out. No part is tested twice, and none
+is tested once the answer is known.
+
+A plain `and` chain is one group, and a plain `or` chain is groups of one, so
+every earlier program compiles to exactly the same bytes; all 21 games and
+examples were compared. The check runs five mixed shapes against
+JavaScript's `&&` and `||` for all sixteen settings of four flags, in an
+if-else, a one-line if and a while. Each of five breakages fails it: a
+group's failure leaving instead of trying the next group, the group's end not
+flipped, the last group's failures dropped, the next group's start patched
+too late, and the jumps into the body left unpatched.

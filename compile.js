@@ -544,23 +544,29 @@ export function compile(source) {
       return
     }
 
-    // a and b and c: every part gets its own skip and jump out, so the first
-    // part that fails leaves. Returns the jumps to patch once the end is known.
-    // and: each condition that fails jumps out. or: each but the last has its skip flipped and
-    // jumps into the body when it holds. A condition joins with one or the other, not both.
+    // Groups of and joined by or, and binding tighter: a and b or c is (a and b) or c. In a
+    // group, a failing part jumps to the next group, or out from the last. Returns the jumps out.
     const conditions = () => {
       const outs = [], toBody = []
-      let joiner = null
+      let toNext = []
       for (;;) {
+        for (const j of toNext) code[j] = 0x1000 | here()
+        const fails = []
         condition()
-        const more = peek() === "and" || peek() === "or"
-        if (more && joiner && peek() !== joiner) throw new Fault("a condition can join with and or with or, not both", line())
-        if (more && peek() === "or") {
-          code[code.length - 1] = flipSkip(code[code.length - 1])
-          toBody.push(emit(0x1000))
-        } else outs.push(emit(0x1000))
-        if (!more) break
-        joiner = next()
+        while (peek() === "and") {
+          fails.push(emit(0x1000))
+          next()
+          condition()
+        }
+        if (peek() !== "or") {
+          outs.push(...fails, emit(0x1000))
+          break
+        }
+        // The group held: its last skip is flipped, to jump into the body. DOCS.md has the layout.
+        code[code.length - 1] = flipSkip(code[code.length - 1])
+        toBody.push(emit(0x1000))
+        toNext = fails
+        next()
       }
       for (const j of toBody) code[j] = 0x1000 | here()
       outs.toBody = toBody.length

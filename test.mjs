@@ -215,8 +215,31 @@ check("or runs the body when any condition holds, in every kind of if and in whi
   // while x != 0 or y != 0 counts both down to zero.
   const loop = run(`var x = 3\nvar y = 5\nvar n = 0\nwhile x != 0 or y != 0 {\nif x != 0 { x -= 1 }\nif y != 0 { y -= 1 }\nn += 1\n}\nhalt`)
   assert(loop.v[2] === 5, `while ... or ... ran ${loop.v[2]} times, not 5`)
-  const mixed = compile("var x = 1\nif x == 1 and x == 2 or x == 3 { halt }\nhalt").error
-  assert(mixed && /not both/.test(mixed.message), `mixing and with or should be refused: ${mixed && mixed.message}`)
+})
+
+check("and binds tighter than or, for every input, in if, if-else and while", () => {
+  // Each shape against JavaScript's own && and ||, for all sixteen settings of four flags.
+  const shapes = [
+    ["p == 1 and q == 1 or r == 1", (p, q, r) => (p && q) || r],
+    ["p == 1 or q == 1 and r == 1", (p, q, r) => p || (q && r)],
+    ["p == 1 and q == 1 or r == 1 and s == 1", (p, q, r, s) => (p && q) || (r && s)],
+    ["p == 1 or q == 1 and r == 1 or s == 1", (p, q, r, s) => p || (q && r) || s],
+    ["p == 1 and q != 0 and r == 1 or s > 0", (p, q, r, s) => (p && q && r) || s],
+  ]
+  for (const [cond, truth] of shapes) {
+    for (let bits = 0; bits < 16; bits++) {
+      const [p, q, r, s] = [bits & 1, (bits >> 1) & 1, (bits >> 2) & 1, (bits >> 3) & 1]
+      const want = Boolean(truth(p, q, r, s))
+      const vars = `sprite dot [ 0x80 ]\nvar p = ${p}\nvar q = ${q}\nvar r = ${r}\nvar s = ${s}\n`
+      const withElse = run(`${vars}if ${cond} { draw dot at 1, 1 } else { draw dot at 3, 3 }\nhalt`)
+      assert(on(withElse, 1, 1) === want && on(withElse, 3, 3) === !want, `${cond} with ${p}${q}${r}${s} took the wrong branch`)
+      const oneLine = run(`${vars}if ${cond} { draw dot at 1, 1 }\nhalt`)
+      assert(on(oneLine, 1, 1) === want, `one-line ${cond} with ${p}${q}${r}${s} should be ${want}`)
+      // A while runs once when the condition holds, since the body clears p, q, r and s.
+      const loop = run(`${vars}var n = 0\nwhile ${cond} {\nn += 1\np = 0\nq = 0\nr = 0\ns = 0\n}\nhalt`)
+      assert(loop.v[4] === (want ? 1 : 0), `while ${cond} with ${p}${q}${r}${s} ran ${loop.v[4]} times`)
+    }
+  }
 })
 
 check("<= and >= agree with the arithmetic, against variables and numbers, in both kinds of if", () => {
