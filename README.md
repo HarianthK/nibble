@@ -139,12 +139,14 @@ languages: `x == 0 and y == 0 or lives == 0` means
 range, ends included. The counter is one of your variables, the start can be a
 number or another variable, and so can the end. A variable end is read again
 each round, so a body that moves it changes how far the loop goes, and a start
-past the end runs nothing.
+past the end runs nothing. `step` counts by any number from 1 to 255, which
+is how a row of sprites gets spaced out, and a stepped loop may end at 255.
 
 ```
 loop { ... }
 while x != 10 { ... }
 for x = 2 to 9 { draw dot at x, 3 }
+for x = 0 to 60 step 4 { draw dot at x, 8 }
 loop { if key(E) { break } }
 ```
 

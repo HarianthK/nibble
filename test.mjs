@@ -515,6 +515,38 @@ for x = 0 to n { if x < 8 { continue }
 c += 1 }`), [2, 10]), "continue did not count on")
 })
 
+check("for with a step counts by it, stops at the end, and stops when a byte would wrap", () => {
+  // Rounds in c and the counter after, each worked out by hand.
+  const rounds = (src) => { const cpu = run(`var x = 0
+var n = 0
+var c = 0
+const BIG = 64
+${src}
+halt`, { frames: 200 }); return `${cpu.v[2]} ${cpu.v[0]}` }
+  const cases = [
+    ["for x = 0 to 10 step 3 { c += 1 }", "4 12"], // 0 3 6 9
+    ["for x = 0 to 9 step 3 { c += 1 }", "4 12"], // the end itself is a round
+    ["for x = 5 to 4 step 2 { c += 1 }", "0 5"],
+    ["for x = 7 to 7 step 5 { c += 1 }", "1 12"],
+    ["for x = 250 to 255 step 2 { c += 1 }", "3 0"], // 250 252 254, then 256 wraps
+    ["for x = 0 to 255 step BIG { c += 1 }", "4 0"], // 0 64 128 192
+    ["for x = 255 to 255 step 1 { c += 1 }", "1 0"],
+    ["n = 9\nfor x = 1 to n step 4 { c += 1 }", "3 13"], // 1 5 9
+    ["n = 20\nfor x = 0 to n step 5 { c += 1\nn = 7 }", "2 10"], // the end is read each round
+    ["for x = 0 to 9 step 3 { if x == 3 { continue }\nc += 1 }", "3 12"],
+    ["for x = 0 to 30 step 10 { if x == 20 { break }\nc += 1 }", "2 20"],
+  ]
+  for (const [src, want] of cases) assert(rounds(src) === want, `${JSON.stringify(src)} gave ${rounds(src)}, expected ${want}`)
+  const refused = (src, pattern) => {
+    const { error } = compile(`var a = 1\nvar b = 4\n${src}`)
+    assert(error && error.line === 3 && pattern.test(error.message), `${src} should be refused, got ${error && error.message}`)
+  }
+  refused("for a = 0 to 9 step 0 { }", /step by 0/)
+  refused("for a = 0 to 9 step b { }", /not a variable/)
+  refused("for a = 0 to 9 step 256 { }", /0 to 255/)
+  refused("for a = 0 to a step 2 { }", /own counter/)
+})
+
 check("a for loop's end cannot be its own counter, and says so with the line", () => {
   const { error } = compile(`var a = 1
 var b = 4

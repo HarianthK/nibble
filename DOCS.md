@@ -348,3 +348,24 @@ if-else, a one-line if and a while. Each of five breakages fails it: a
 group's failure leaving instead of trying the next group, the group's end not
 flipped, the last group's failures dropped, the next group's start patched
 too late, and the jumps into the body left unpatched.
+
+## Counting by more than one
+
+`for x = 0 to 60 step 4` cannot use the plain loop's test, which waits for the
+counter to equal one more than the end: counting by 4 from 0, the counter
+never equals 61. So a stepped loop asks the variable end's question, end minus
+counter free of a borrow, for a number end as well, after loading the number
+into the scratch register. Going past 255 is the other way out. `7XNN` adds
+without telling anyone, so the step is put in the scratch register and added
+with `8XY4`, which sets the flag on a carry, and a carry leaves the loop. That
+also means a stepped loop can end at 255, which the plain one refuses.
+
+Loops without `step` keep their shorter forms, so every game and example
+compiles to the bytes it did before. The step must be a number or a constant,
+1 to 255; 0 would never end and a variable step is refused rather than
+half-supported. The checks count rounds and read the counter afterwards, each
+case worked out by hand: 0 to 10 by 3 runs 4 rounds and leaves 12, 250 to 255
+by 2 runs 3 and leaves 0, a start past the end runs none, a variable end is
+read each round, and `continue` and `break` behave. Eight breakages fail them,
+among them dropping the carry exit, which only the 250 case notices, and
+putting the step after `continue`'s landing point.

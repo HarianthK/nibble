@@ -595,6 +595,30 @@ export function compile(source) {
       else emit(0x6000 | (target << 8) | (number(first, ln) & 0xff))
       eat("to")
       const lastTok = next()
+      if (peek() === "step") {
+        // step n: run while x <= end and leave when adding n carries past 255, so any end
+        // works. Loops without a step keep their shorter forms. See DOCS.md.
+        next()
+        const by = next()
+        if (isName(by)) throw new Fault("a for steps by a number, not a variable", ln)
+        const step = number(by, ln)
+        if (step === 0) throw new Fault("a for cannot step by 0", ln)
+        if (isName(lastTok) && reg(lastTok, ln) === target) throw new Fault("the end of a for cannot be its own counter", ln)
+        const top = here()
+        emit(isName(lastTok) ? 0x8000 | (SCRATCH_A << 8) | (reg(lastTok, ln) << 4) : 0x6000 | (SCRATCH_A << 8) | number(lastTok, ln))
+        emit(0x8005 | (SCRATCH_A << 8) | (target << 4))
+        emit(0x3f01)
+        const jumpOut = emit(0x1000)
+        const [broken, again] = loopBody()
+        jumpTo(again, here())
+        emit(0x6000 | (SCRATCH_A << 8) | step)
+        emit(0x8004 | (target << 8) | (SCRATCH_A << 4))
+        emit(0x4f01)
+        const carried = emit(0x1000)
+        emit(0x1000 | top)
+        closeLoop([jumpOut, carried, ...broken])
+        return
+      }
       if (isName(lastTok)) {
         // A variable end is read each round: run while x <= end, which a start past the end never
         // is, and leave when x wraps to 0, since every byte is <= 255.
