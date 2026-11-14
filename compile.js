@@ -47,6 +47,25 @@ class Fault extends Error {
   }
 }
 
+// The known name nearest a misspelt one: at most two edits away (Levenshtein), one for 2 or 3 letters, none for 1.
+function didYouMean(word, names) {
+  const distance = (a, b) => {
+    let row = [...Array(b.length + 1).keys()]
+    for (let i = 1; i <= a.length; i++) {
+      const next = [i]
+      for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+      row = next
+    }
+    return row[b.length]
+  }
+  let best, bestDistance = Math.min(2, word.length >> 1) + 1
+  for (const name of names) {
+    const d = distance(word, name)
+    if (d < bestDistance) [best, bestDistance] = [name, d]
+  }
+  return best === undefined ? "" : `; did you mean ${best}?`
+}
+
 function lex(source) {
   const tokens = []
   const lines = source.split("\n")
@@ -186,7 +205,7 @@ export function compile(source) {
 
   const reg = (name, ln) => {
     if (consts.has(name)) throw new Fault(`${name} is a constant, and only a variable can go there`, ln)
-    if (!vars.has(name)) throw new Fault(`no variable called ${name}`, ln)
+    if (!vars.has(name)) throw new Fault(`no variable called ${name}${didYouMean(name, vars.keys())}`, ln)
     return vars.get(name)
   }
 
@@ -422,7 +441,7 @@ export function compile(source) {
     if (word === "draw") {
       next()
       const spriteName = next()
-      if (!sprites.has(spriteName)) throw new Fault(`no sprite called ${spriteName}`, ln)
+      if (!sprites.has(spriteName)) throw new Fault(`no sprite called ${spriteName}${didYouMean(spriteName, sprites.keys())}`, ln)
       eat("at")
       const x = intoScratch(SCRATCH_A, ln)
       eat(",")
@@ -898,7 +917,7 @@ export function compile(source) {
     }
     for (const { slot, name, line: ln } of calls) {
       const address = routines.get(name)
-      if (address === undefined) throw new Fault(`nothing here is called ${name}`, ln)
+      if (address === undefined) throw new Fault(`nothing here is called ${name}${didYouMean(name, routines.keys())}`, ln)
       const word = 0x2000 | address
       code[slot] = word
       bytes[slot * 2] = (word >> 8) & 0xff

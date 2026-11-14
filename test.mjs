@@ -1223,5 +1223,22 @@ check("Guess the number takes one guess per press, hints, and stops on the right
   assert(on(cpu, 30, 16) || on(cpu, 31, 16) || on(cpu, 30, 17), "the ending should show the count at 30, 16")
 })
 
+check("a misspelt variable, sprite or routine is answered with the nearest real name", () => {
+  const cases = [
+    ["var score = 0\nscroe += 1", "no variable called scroe; did you mean score?"],  // two letters swapped: two edits
+    ["var lives = 3\nvar level = 1\nlevle += 1", "no variable called levle; did you mean level?"],
+    ["var ab = 1\nac += 1", "no variable called ac; did you mean ab?"],  // a short name allows one edit
+    ["var abc = 1\nxyz += 1", "no variable called xyz"],  // three edits: no guess
+    ["var a = 1\nvar b = 2\nc += 1", "no variable called c"],  // one letter: every one-letter name is one edit away
+    ["sprite ship [ 0x60 ]\ndraw shp at 1, 1", "no sprite called shp; did you mean ship?"],
+    ["def jump { }\njumpp", "nothing here is called jumpp; did you mean jump?"],
+    ["def jump { }\nleap", "nothing here is called leap"],
+  ]
+  for (const [src, want] of cases) {
+    const { error } = compile(src)
+    assert(error && error.message === want && error.line === src.split("\n").length, `${JSON.stringify(src)} gave ${error && error.message}, expected ${want}`)
+  }
+})
+
 console.log(`\n${passed} passed, ${failed} failed\n`)
 process.exit(failed ? 1 : 0)
