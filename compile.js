@@ -79,9 +79,13 @@ function lex(source) {
     }
     // The two character operators have to be tried before the single ones, or
     // != would come out as ! followed by =.
-    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-*/%&|^]=|[=!<>]=|[=+\-*!<>&|^])/g
-    let m
-    while ((m = re.exec(stripped))) tokens.push({ text: m[1], line })
+    // Sticky, so a character no token starts with stops the match instead of being stepped over.
+    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-*/%&|^]=|[=!<>]=|[=+\-*!<>&|^])/y
+    let m, end = 0
+    while ((m = re.exec(stripped))) { tokens.push({ text: m[1], line }); end = re.lastIndex }
+    const left = stripped.slice(end).trim()
+    if (left[0] === '"') throw new Fault('this text is never closed with a "', line)
+    if (left) throw new Fault(`I do not know what ${left[0]} means`, line)
     tokens.push({ text: "\n", line })
   })
   tokens.push({ text: "<end>", line: lines.length })
@@ -89,7 +93,8 @@ function lex(source) {
 }
 
 export function compile(source) {
-  const tokens = lex(source)
+  let tokens
+  try { tokens = lex(source) } catch (err) { return { bytes: null, error: { message: err.message, line: err.line } } }
   let at = 0
 
   const peek = () => tokens[at].text

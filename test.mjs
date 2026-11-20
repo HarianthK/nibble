@@ -1240,5 +1240,19 @@ check("a misspelt variable, sprite or routine is answered with the nearest real 
   }
 })
 
+check("a character the language does not use is refused, not skipped", () => {
+  const cases = [
+    ["var x = 1\nx ~= 2", "I do not know what ~ means"],  // was compiled as x = 2
+    ["var x = 5 $", "I do not know what $ means"],
+    ["var x = 5\nif x > 3 @ { }","I do not know what @ means"],
+    ["var x = 1\nprint \"HELLO", "this text is never closed with a \""],
+  ]
+  for (const [src, want] of cases) {
+    const { error } = compile(src)
+    assert(error && error.message === want && error.line === src.split("\n").length, `${JSON.stringify(src)} gave ${error && error.message}, expected ${want}`)
+  }
+  assert(!compile('var x = 1 # a comment with ~ and @ in it\nprint "OK? YES!" at 0, 0\nhalt').error, "a comment or a string may hold any character")
+})
+
 console.log(`\n${passed} passed, ${failed} failed\n`)
 process.exit(failed ? 1 : 0)

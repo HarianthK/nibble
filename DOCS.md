@@ -369,3 +369,14 @@ by 2 runs 3 and leaves 0, a start past the end runs none, a variable end is
 read each round, and `continue` and `break` behave. Eight breakages fail them,
 among them dropping the carry exit, which only the 250 case notices, and
 putting the step after `continue`'s landing point.
+
+## A character the lexer does not know
+
+The lexer used to find each token by searching forward from the last one, so a
+character that starts no token, such as `~`, `$` or `@`, was stepped over
+without a word. `x ~= 2` compiled as `x = 2`, and `var x = 5 $` compiled as if
+the `$` were not there. The pattern is now sticky: it has to match exactly where
+the last token ended, and whatever is left on the line once it stops, other than
+blanks, is reported with its line. A `"` left over means a string that is never
+closed, which gets its own message. Comments are cut off before this check, so
+they may hold anything, and so may a closed string.
