@@ -40,6 +40,9 @@ const LETTERS = {
   "-": [0x00, 0x00, 0xf0, 0x00, 0x00], ":": [0x00, 0x40, 0x00, 0x40, 0x00],
 }
 
+// The words statements and expressions are made of; none of them can be a name.
+const KEYWORDS = new Set("and array at beep break clear const continue def draw else for halt hit if key loop of or print rand show sprite step to var wait while".split(" "))
+
 class Fault extends Error {
   constructor(message, line) {
     super(message)
@@ -116,6 +119,14 @@ export function compile(source) {
   const calls = []
   const breaks = [] // one list of jump slots per loop currently open
   const continues = [] // the same, for continue, patched to where the next round starts
+  // Every declaration comes through here, so no two things share a name and no keyword is one.
+  const declare = (name, what, ln) => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Fault(`${name} is not a name a ${what} can have`, ln)
+    if (KEYWORDS.has(name)) throw new Fault(`${name} is a word the language uses, so it cannot name a ${what}`, ln)
+    for (const [kind, names] of [["a constant", consts], ["a variable", vars], ["an array", arrays], ["a sprite", sprites], ["a routine", routines]]) {
+      if (names.has(name)) throw new Fault(`${name} is already ${kind}`, ln)
+    }
+  }
   // One tick of the delay timer, which the machine counts down at 60Hz.
   const emitWait = () => {
     emit(0x6000 | (SCRATCH_A << 8) | 1)
@@ -360,8 +371,7 @@ export function compile(source) {
     if (word === "const") {
       next()
       const name = next()
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Fault(`${name} is not a name a constant can have`, ln)
-      if (vars.has(name) || routines.has(name) || sprites.has(name)) throw new Fault(`${name} is already used for something else`, ln)
+      declare(name, "constant", ln)
       eat("=")
       consts.set(name, number(next(), ln))
       return
@@ -370,8 +380,7 @@ export function compile(source) {
     if (word === "var") {
       next()
       const name = next()
-      if (consts.has(name)) throw new Fault(`${name} is already a constant`, ln)
-      if (vars.has(name)) throw new Fault(`${name} is already a variable`, ln)
+      declare(name, "variable", ln)
       if (vars.size >= MAX_VARS) throw new Fault(`too many variables, ${MAX_VARS} is the limit`, ln)
       const r = vars.size
       vars.set(name, r)
@@ -383,8 +392,7 @@ export function compile(source) {
     if (word === "array") {
       next()
       const name = next()
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Fault(`${name} is not a name an array can have`, ln)
-      if (arrays.has(name) || sprites.has(name) || vars.has(name) || consts.has(name) || routines.has(name)) throw new Fault(`${name} is already used for something else`, ln)
+      declare(name, "array", ln)
       eat("[")
       const cells = []
       while (peek() !== "]") {
@@ -404,6 +412,7 @@ export function compile(source) {
     if (word === "sprite") {
       next()
       const name = next()
+      declare(name, "sprite", ln)
       eat("[")
       const bytes = []
       while (peek() !== "]") {
@@ -703,8 +712,7 @@ export function compile(source) {
     if (word === "def") {
       next()
       const name = next()
-      if (routines.has(name)) throw new Fault(`${name} is already a routine`, ln)
-      if (vars.has(name)) throw new Fault(`${name} is already a variable`, ln)
+      declare(name, "routine", ln)
       // The body sits in the middle of the program, so step over it.
       const skip = emit(0x1000)
       routines.set(name, here())

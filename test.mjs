@@ -1240,6 +1240,27 @@ check("a misspelt variable, sprite or routine is answered with the nearest real 
   }
 })
 
+check("a name is declared once, for one thing, and is never a keyword or a number", () => {
+  const cases = [
+    ["sprite s [ 1 ]\nsprite s [ 2 ]", "s is already a sprite"],  // the second used to replace the first
+    ["sprite s [ 1 ]\nvar s = 1", "s is already a sprite"],
+    ["def s { }\nsprite s [ 1 ]", "s is already a routine"],
+    ["array a [ 1 ]\ndef a { }", "a is already an array"],
+    ["var a = 1\narray a [ 1 ]", "a is already a variable"],
+    ["const N = 1\nvar N = 2", "N is already a constant"],
+    ["var x = 1\nvar x = 2", "x is already a variable"],
+    ["var if = 1", "if is a word the language uses, so it cannot name a variable"],
+    ["def print { }", "print is a word the language uses, so it cannot name a routine"],
+    ["sprite or [ 1 ]", "or is a word the language uses, so it cannot name a sprite"],
+    ["var 5 = 1", "5 is not a name a variable can have"],
+    ["def 9 { }", "9 is not a name a routine can have"],
+  ]
+  for (const [src, want] of cases) {
+    const { error } = compile(src)
+    assert(error && error.message === want && error.line === src.split("\n").length, `${JSON.stringify(src)} gave ${error && error.message}, expected ${want}`)
+  }
+})
+
 check("a character the language does not use is refused, not skipped", () => {
   const cases = [
     ["var x = 1\nx ~= 2", "I do not know what ~ means"],  // was compiled as x = 2

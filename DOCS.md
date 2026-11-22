@@ -380,3 +380,23 @@ the last token ended, and whatever is left on the line once it stops, other than
 blanks, is reported with its line. A `"` left over means a string that is never
 closed, which gets its own message. Comments are cut off before this check, so
 they may hold anything, and so may a closed string.
+
+## One place that hands out names
+
+Each of the five things a program can name (a constant, a variable, an array,
+a sprite and a routine) used to check for clashes on its own, and each check
+had gaps. A second `sprite s` quietly replaced the first. A sprite and a
+variable could share a name, and so could a routine and an array, so a use of
+the name meant whichever the compiler happened to look up first. `var if = 1`
+and `def print { }` were accepted, which made the keyword a name and broke
+every later `if` or `print`. `var 5 = 1` and `def 9 { }` compiled too.
+
+All five now call one `declare`. It checks that the word has the shape of a
+name and is not one of the language's own words, then refuses it if any of the
+five kinds already uses it, naming which kind that is. The keyword list is
+every word a statement or an expression starts with or contains, `or` and `of`
+included. Every example still compiles.
+
+Taking out any one of the checks in `declare`, or any of the five calls to it,
+makes a test fail. The array's call at first did not, since no test declared an
+array second. `var a = 1` then `array a` now does.
