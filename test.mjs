@@ -1275,5 +1275,29 @@ check("a character the language does not use is refused, not skipped", () => {
   assert(!compile('var x = 1 # a comment with ~ and @ in it\nprint "OK? YES!" at 0, 0\nhalt').error, "a comment or a string may hold any character")
 })
 
+check("a number on the left of a test is the test turned round", () => {
+  // Each pair of x and the number, every comparison, written both ways; r counts the ones that held.
+  const tests = { "==": (a, b) => a === b, "!=": (a, b) => a !== b, "<": (a, b) => a < b, ">": (a, b) => a > b, "<=": (a, b) => a <= b, ">=": (a, b) => a >= b }
+  for (const x of [0, 9, 10, 11, 255]) for (const n of [0, 10, 255]) for (const [op, holds] of Object.entries(tests)) {
+    const cpu = run(`const N = ${n}\nvar x = ${x}\nvar r = 0\nif ${n} ${op} x { r += 1 }\nif N ${op} x { r += 1 }\nhalt`, { frames: 2 })
+    const want = holds(n, x) ? 2 : 0
+    assert(cpu.v[1] === want, `${n} ${op} ${x} held ${cpu.v[1]} times of 2, expected ${want}`)
+  }
+})
+
+check("an assignment that goes past one operation says what to write instead", () => {
+  const cases = [
+    ["var x = 1\nvar y = 2\nx = y * 3", "* only works in place: write x = y, then x *= 3 on the next line"],  // was "did not understand *"
+    ["var x = 1\nx = 8 / 2", "/ only works in place: write x = 8, then x /= 2 on the next line"],  // was "I do not know what / means"
+    ["var x = 1\nvar y = 2\nx = y % y", "% only works in place: write x = y, then x %= y on the next line"],
+    ["var x = 1\nx = x + 1 + 2", "an assignment has one operation at most, as x = y + 1, so + needs a line of its own"],
+    ["var x = 1\nif 3 > 4 { x = 2 }", "3 > 4 compares two numbers, so it never changes; one side needs a variable"],  // was "no variable called 3"
+  ]
+  for (const [src, want] of cases) {
+    const { error } = compile(src)
+    assert(error && error.message === want && error.line === src.split("\n").length, `${JSON.stringify(src)} gave ${error && error.message}, expected ${want}`)
+  }
+})
+
 console.log(`\n${passed} passed, ${failed} failed\n`)
 process.exit(failed ? 1 : 0)

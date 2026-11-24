@@ -83,7 +83,7 @@ function lex(source) {
     // The two character operators have to be tried before the single ones, or
     // != would come out as ! followed by =.
     // Sticky, so a character no token starts with stops the match instead of being stepped over.
-    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-*/%&|^]=|[=!<>]=|[=+\-*!<>&|^])/y
+    const re = /\s*("[^"]*"|[A-Za-z_][A-Za-z0-9_]*|0x[0-9a-fA-F]+|\d+|[[\]{}(),]|<<=|>>=|[+\-*/%&|^]=|[=!<>]=|[=+\-*/%!<>&|^])/y
     let m, end = 0
     while ((m = re.exec(stripped))) { tokens.push({ text: m[1], line }); end = re.lastIndex }
     const left = stripped.slice(end).trim()
@@ -323,10 +323,14 @@ export function compile(source) {
       emit(0xe000 | (SCRATCH_A << 8) | (negated ? 0xa1 : 0x9e))
       return
     }
-    const leftName = next()
+    let leftName = next()
+    let op = next()
+    let rightTok = next()
+    // A number or constant on the left is the same test turned round: 10 > x is x < 10.
+    const TURNED = { "==": "==", "!=": "!=", "<": ">", ">": "<", "<=": ">=", ">=": "<=" }
+    if (!isName(leftName) && isName(rightTok) && op in TURNED) [leftName, op, rightTok] = [rightTok, TURNED[op], leftName]
+    if (!isName(leftName) && !isName(rightTok)) throw new Fault(`${leftName} ${op} ${rightTok} compares two numbers, so it never changes; one side needs a variable`, ln)
     const left = reg(leftName, ln)
-    const op = next()
-    const rightTok = next()
 
     if (op === "<" || op === ">" || op === "<=" || op === ">=") {
       // Subtracting sets the flag to 1 when there was nothing to borrow, which
@@ -864,6 +868,10 @@ export function compile(source) {
         const from = operand(next(), ln)
         emit(0x8000 | (target << 8) | (from << 4) | BITWISE[sign])
       }
+      // One operation is as long as an assignment gets; anything after it is said here, not left to puzzle the next statement.
+      const rest = peek()
+      if (["*", "/", "%"].includes(rest)) throw new Fault(`${rest} only works in place: write ${name} = ${first}, then ${name} ${rest}= ${tokens[at + 1]?.text} on the next line`, ln)
+      if (rest !== "\n" && rest !== "}" && rest !== "<end>") throw new Fault(`an assignment has one operation at most, as ${name} = y + 1, so ${rest} needs a line of its own`, ln)
       return
     }
 

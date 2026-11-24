@@ -400,3 +400,26 @@ included. Every example still compiles.
 Taking out any one of the checks in `declare`, or any of the five calls to it,
 makes a test fail. The array's call at first did not, since no test declared an
 array second. `var a = 1` then `array a` now does.
+
+## Errors that pointed at the wrong thing
+
+A differential run compiled every operator and every comparison, with each mix
+of variables and numbers on each side, ran them on the emulator, and checked
+the registers against plain arithmetic. Nothing computed wrongly. Three things
+that look like ordinary code got errors that misled, though:
+
+- `if 10 > x` said "no variable called 10". A number or constant on the left
+  is now the same test turned round, `x < 10`, so it compiles. Two numbers,
+  `if 3 > 4`, say they never change and need a variable on one side.
+- `x = y * 3` said "did not understand *", because the assignment stopped after
+  `y` and left `*` to puzzle the next statement. `x = 8 / 2` said "I do not know
+  what / means", because `/` and `%` on their own were not tokens at all. Both
+  now say to write `x = y`, then `x *= 3` on the next line. The machine cannot
+  multiply, so the loop that does it works on a variable in place.
+- `x = x + 1 + 2` said "did not understand +". It now says an assignment takes
+  one operation at most.
+
+The tests run each comparison both ways round for five values of x against
+three numbers and a constant, and check the new messages and their lines. Both
+fail on the old compiler, and swapping `<` and `>` in the turned-round table
+fails the first.

@@ -122,6 +122,7 @@ if x < 10 { ... }
 if x > y { ... }
 if x >= 10 { ... }
 if x <= y { ... }
+if 10 > x { ... }      # the same as x < 10
 if key(A) { ... }
 if !key(D) { ... }
 if hit { ... }
