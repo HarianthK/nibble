@@ -43,6 +43,9 @@ const LETTERS = {
 // The words statements and expressions are made of; none of them can be a name.
 const KEYWORDS = new Set("and array at beep break clear const continue def draw else for halt hit if key loop of or print rand show sprite step to var wait while".split(" "))
 
+// A token as an error message names it; the line break and the end of the file have no text of their own.
+const said = (t) => (t === "\n" ? "the end of the line" : t === "<end>" ? "the end of the file" : t)
+
 class Fault extends Error {
   constructor(message, line) {
     super(message)
@@ -105,7 +108,7 @@ export function compile(source) {
   const next = () => tokens[at++].text
   const skipNewlines = () => { while (peek() === "\n") at++ }
   const eat = (what) => {
-    if (peek() !== what) throw new Fault(`expected ${what}, found ${peek()}`, line())
+    if (peek() !== what) throw new Fault(`expected ${what}, found ${said(peek())}`, line())
     return next()
   }
   // A named number is a number wherever it appears, so it is not a name.
@@ -228,7 +231,7 @@ export function compile(source) {
   const number = (t, ln) => {
     if (consts.has(t)) return consts.get(t)
     const n = t.startsWith("0x") ? parseInt(t, 16) : parseInt(t, 10)
-    if (Number.isNaN(n)) throw new Fault(`${t} is not a number`, ln)
+    if (Number.isNaN(n)) throw new Fault(said(t) === t ? `${t} is not a number` : `expected a number, found ${said(t)}`, ln)
     // Everything here is a byte, and a number that wraps would be a silent
     // mistake rather than the one asked for.
     if (n < 0 || n > 255) throw new Fault(`${t} is outside 0 to 255, which is all a byte can hold`, ln)
@@ -499,7 +502,7 @@ export function compile(source) {
     if (word === "print") {
       next()
       const text = next()
-      if (!text.startsWith('"')) throw new Fault(`print wants some words in quotes, found ${text}`, ln)
+      if (!text.startsWith('"')) throw new Fault(`print wants some words in quotes, found ${said(text)}`, ln)
       eat("at")
       const xTok = next()
       eat(",")
@@ -828,7 +831,7 @@ export function compile(source) {
         for (let i = 0; i < n; i++) emit(0x8000 | (target << 8) | (target << 4) | (op === "<<=" ? 0xe : 0x6))
         return
       }
-      if (op !== "=") throw new Fault(`expected = after ${name}, found ${op}`, ln)
+      if (op !== "=") throw new Fault(`expected = after ${name}, found ${said(op)}`, ln)
       const first = next()
       // x = key holds the program until a key is pressed and let go.
       if (first === "key" && peek() !== "(") { emit(0xf00a | (target << 8)); return }

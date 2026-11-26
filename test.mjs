@@ -1299,5 +1299,19 @@ check("an assignment that goes past one operation says what to write instead", (
   }
 })
 
+check("an error at the end of a line names the end of the line, not a raw line break", () => {
+  const cases = [
+    ["var x", "expected =, found the end of the line"],
+    ["var x = 0\nif x == 1", "expected {, found the end of the line"],
+    ["print", "print wants some words in quotes, found the end of the line"],
+    ["sprite s [ 1 ]\ndraw s at", "expected a number, found the end of the line"],
+    ["var x = 0\nfor x = 1", "expected to, found the end of the line"],
+  ]
+  for (const [src, want] of cases) {
+    const { error } = compile(src)
+    assert(error && error.message === want, `${JSON.stringify(src)} gave ${JSON.stringify(error && error.message)}, expected ${want}`)
+  }
+})
+
 console.log(`\n${passed} passed, ${failed} failed\n`)
 process.exit(failed ? 1 : 0)

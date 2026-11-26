@@ -423,3 +423,15 @@ The tests run each comparison both ways round for five values of x against
 three numbers and a constant, and check the new messages and their lines. Both
 fail on the old compiler, and swapping `<` and `>` in the turned-round table
 fails the first.
+
+## Errors at the end of a line
+
+The lexer turns each line break into a token whose text is a real newline,
+and the end of the file into `<end>`. Messages that name the token they found
+printed that text as it was, so `var x` with no value said "expected =, found"
+and then broke the line, in the terminal and in the editor's error bar alike.
+`print` alone, an `if` with no brace and `draw s at` with no position did the
+same. A small `said()` now names these two tokens, "the end of the line" and
+"the end of the file", in every message that shows what was found, and a
+missing number reads "expected a number, found the end of the line".
+`test.mjs` checks five such programs; each fails on the old compiler.
