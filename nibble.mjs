@@ -18,9 +18,26 @@ at https://harianthk.github.io/chip8 under "Load a program".`)
   process.exit(args.length ? 0 : 1)
 }
 
-const input = args[0]
 const at = args.indexOf("-o")
+if (at >= 0 && args[at + 1] === undefined) {
+  console.error("-o needs a file name after it")
+  process.exit(1)
+}
+// The program is the first word that is neither a flag nor the name after -o, wherever it sits.
+const input = args.find((a, i) => !a.startsWith("-") && (at < 0 || i !== at + 1))
+if (input === undefined) {
+  console.error("which program? as in: node nibble.mjs game.nib")
+  process.exit(1)
+}
 const output = at >= 0 ? args[at + 1] : input.replace(/\.nib$/, "") + ".ch8"
+const write = (file, data) => {
+  try {
+    writeFileSync(file, data)
+  } catch (err) {
+    console.error(`cannot write ${file}: ${err.code ?? err.message}`)
+    process.exit(1)
+  }
+}
 
 let source
 try {
@@ -39,10 +56,10 @@ if (error) {
   process.exit(1)
 }
 
-writeFileSync(output, bytes)
+write(output, bytes)
 console.log(`${output}  ${bytes.length} bytes`)
 if (args.includes("--octo")) {
   const octo = output.replace(/\.ch8$/, "") + ".8o"
-  writeFileSync(octo, disassemble(bytes))
+  write(octo, disassemble(bytes))
   console.log(`${octo}  Octo source`)
 }

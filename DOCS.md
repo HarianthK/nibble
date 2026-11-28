@@ -435,3 +435,14 @@ same. A small `said()` now names these two tokens, "the end of the line" and
 "the end of the file", in every message that shows what was found, and a
 missing number reads "expected a number, found the end of the line".
 `test.mjs` checks five such programs; each fails on the old compiler.
+
+## The command line's own arguments
+
+`nibble.mjs` took the first argument as the program, so `--octo game.nib`
+went looking for a file called `--octo`. It now takes the first word that is
+not a flag and not the name after `-o`. A bare `-o` at the end used to reach
+`writeFileSync(undefined)` and print a stack trace; it now says `-o needs a
+file name after it`. A write that fails (a folder that does not exist, a
+read-only file) says `cannot write FILE: ENOENT` instead of a trace, for the
+`.ch8` and the `.8o` alike. One test runs all four cases; the old tool fails
+the first.

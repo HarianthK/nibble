@@ -1089,6 +1089,27 @@ check("the command line tool refuses a broken program and says where", () => {
   }
 })
 
+check("the command line tool says what is wrong with its own arguments, with no stack trace", () => {
+  writeFileSync("__args.nib", "loop { wait }\n")
+  const run = (...args) => {
+    try {
+      execFileSync("node", ["nibble.mjs", ...args], { stdio: "pipe" })
+      return { ok: true, err: "" }
+    } catch (err) {
+      return { ok: false, err: String(err.stderr) }
+    }
+  }
+  try {
+    assert(run("--octo", "__args.nib", "-o", "__args.ch8").ok, "a flag before the program's name should not be read as the program")
+    for (const [args, words] of [[["__args.nib", "-o"], "-o needs a file name"], [["__args.nib", "-o", "__nodir/x.ch8"], "cannot write __nodir/x.ch8"], [["-o", "__args.ch8"], "which program"]]) {
+      const { ok, err } = run(...args)
+      assert(!ok && err.includes(words) && !err.includes("    at "), `${args.join(" ")}: ${err.trim()}`)
+    }
+  } finally {
+    for (const f of ["__args.nib", "__args.ch8", "__args.8o"]) rmSync(f, { force: true })
+  }
+})
+
 check("mistakes are reported with a line number", () => {
   const { error } = compile("var x = 1\ndraw nothing at x, 2\n")
   assert(error, "a missing sprite should have been an error")
